@@ -2979,10 +2979,10 @@ textarea.input {
   fill: currentColor;
 }
 
-/* Пока репозитория нет, значок висит приглушённым и никуда не ведёт. */
-.credits__gh--off {
-  opacity: 0.45;
-  cursor: default;
+.credits__gh {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(154, 161, 173, 0.4);
 }
 
 /* --- Смена seed-фразы ---------------------------------------------------- */

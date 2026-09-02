@@ -1,7 +1,7 @@
 import { el, copyText, shortAddress } from "../dom.js";
 import { glassButton, linkButton, sheet, toast } from "../components.js";
 import { openLink } from "../../telegram.js";
-import { COIN } from "../../core/constants.js";
+import { APP_REPO_URL, COIN } from "../../core/constants.js";
 import { unlock, wipe } from "../../crypto/vault.js";
 import { requirePin } from "./lock.js";
 
@@ -86,8 +86,8 @@ export function settingsScreen(ctx) {
     el("div.screen__spacer"),
 
     /*
-     * Кто это сделал и где исходники. Ссылка на репозиторий появится
-     * позже — до тех пор кнопка неактивна, а не ведёт в никуда.
+     * Кто это сделал и где исходники: клиент открытый, и проверить его
+     * должно быть можно прямо из приложения.
      */
     el("div.credits", {}, [
       el("a.credits__dev", {
@@ -100,10 +100,16 @@ export function settingsScreen(ctx) {
           openLink("https://t.me/sweepes");
         },
       }),
-      el("span.credits__gh.credits__gh--off", { title: "Ссылка появится позже" }, [
-        githubMark(),
-        el("span", { text: "GitHub" }),
-      ]),
+      el("a.credits__gh", {
+        href: APP_REPO_URL,
+        target: "_blank",
+        rel: "noopener",
+        title: "Исходный код приложения",
+        onclick: (e) => {
+          e.preventDefault();
+          openLink(APP_REPO_URL);
+        },
+      }, [githubMark(), el("span", { text: "GitHub" })]),
     ]),
 
     el("div.screen__actions", {}, [

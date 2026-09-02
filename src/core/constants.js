@@ -6,6 +6,9 @@
 /** Исходники контракта: на них ссылается экран с предупреждениями. */
 export const REPO_URL = "https://github.com/ton-blockchain/tg-wallet-contract";
 
+/** Исходники самого приложения. */
+export const APP_REPO_URL = "https://github.com/daniilganiev/gramwallet";
+
 /** Обозначение монеты. Toncoin переименован в Gram 15.06.2026; сеть по-прежнему TON. */
 export const COIN = "GRAM";
 
