@@ -32,7 +32,8 @@ and v4 this meant a new wallet and moving every coin to it.
 ### 255 transfers in one transaction
 
 One signature, one network fee, up to 255 recipients. Payroll, payouts,
-airdrops — all in a single batch.
+airdrops — all in a single batch. Recipients are entered one by one or pasted
+as an "address amount" list; the total and the fee are shown before signing.
 
 ### Upgrades without migration
 
