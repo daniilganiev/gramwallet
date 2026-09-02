@@ -21,6 +21,20 @@ client for an open contract.
 
 ## What it does
 
+The contract features it exists for are implemented.
+
+Seed phrase rotation without changing the address. The key changes while the
+address, balance and history stay the same — nobody who pays you needs to be
+told anything. It can be repeated any number of times.
+
+Up to 255 transfers in a single transaction: messages are encoded as a chain
+of chunks, the way the contract expects.
+
+Upgrades without migration. The logic lives on-chain, so there is no moving to
+a new wallet the way v3 and v4 required.
+
+The rest is ordinary wallet work.
+
 Wallet creation. The 24-word phrase and the key are computed on the device;
 the log prints the same values the console version does — public key, both
 address forms, storage cell size.
@@ -37,9 +51,6 @@ is estimated by a node before signing and shown in the confirmation.
 
 History. Indexer events in the form explorers show them: incoming and outgoing
 transfers, token and NFT moves, deployment. Every entry links to Tonviewer.
-
-Seed phrase rotation. The address, balance and history stay the same — only
-the key changes. It can be repeated any number of times.
 
 Recovery. By phrase, or — if the key was rotated — by phrase together with the
 address. A phrase from Tonkeeper or the Telegram wallet is detected and
