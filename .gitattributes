@@ -1,0 +1,10 @@
+# Единый перевод строки в репозитории, что бы ни стояло в системе.
+* text=auto eol=lf
+*.png binary
+*.gif binary
+*.woff2 binary
+
+# Что не считать кодом проекта: сгенерированный lock-файл и снимки экранов.
+package-lock.json linguist-generated=true
+docs/** linguist-documentation=true
+public/fonts/** linguist-vendored=true
