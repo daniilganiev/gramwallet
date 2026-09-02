@@ -3064,10 +3064,20 @@ textarea.input {
  * выглядит мёртвым. Двигаем только transform: полосы едут в композиторе и
  * саму карточку не перерисовывают.
  */
+/*
+ * Свет обрезает сам этот слой, а не карточка.
+ *
+ * Скруглённое overflow родителя не удерживает то, что браузер вынес в
+ * отдельный слой — а маска и режим наложения ниже как раз его создают.
+ * В webview из-под угла плашки выезжал светлый прямоугольник. Поэтому
+ * рамка и радиус живут здесь же, на том слое, который и композитится.
+ */
 .address__sheen {
   position: absolute;
-  inset: -25% -12%;
+  inset: 0;
   z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
   pointer-events: none;
   /*
    * Плашка овальная, а полоса света — прямоугольник: у скруглённых торцов
@@ -3078,12 +3088,13 @@ textarea.input {
   mask-image: radial-gradient(ellipse 62% 120% at 50% 50%, #000 30%, rgba(0, 0, 0, 0.55) 62%, transparent 100%);
 }
 
+/* Полосы выше и ниже слоя: наклон не должен обрезать их по горизонту. */
 .address__sheen::before,
 .address__sheen::after {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: -30%;
+  bottom: -30%;
   left: 0;
   width: 42%;
   transform: translate3d(-180%, 0, 0) skewX(-18deg);
@@ -3282,6 +3293,9 @@ textarea.input {
   position: absolute;
   inset: 0;
   z-index: 0;
+  /* Та же причина, что у волны: слой обрезает себя сам. */
+  overflow: hidden;
+  border-radius: inherit;
   opacity: 0;
   pointer-events: none;
   background: radial-gradient(
