@@ -12,10 +12,10 @@ client for an open contract.
 
 ## Screens
 
-| | | | |
-| --- | --- | --- | --- |
-| ![About](docs/screens/01-about.png) | ![Creation](docs/screens/02-forge.png) | ![Wallet](docs/screens/03-home.png) | ![Key rotation](docs/screens/04-rotate.png) |
-| About the wallet | Wallet creation | Wallet | Changing the seed phrase |
+| | | | | |
+| --- | --- | --- | --- | --- |
+| ![About](docs/screens/01-about.png) | ![Creation](docs/screens/02-forge.png) | ![Wallet](docs/screens/03-home.png) | ![Key rotation](docs/screens/04-rotate.png) | ![Batch send](docs/screens/05-batch.png) |
+| About the wallet | Wallet creation | Wallet | Changing the seed phrase | Batch send |
 
 ---
 

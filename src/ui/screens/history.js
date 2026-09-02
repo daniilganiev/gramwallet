@@ -27,10 +27,10 @@ export function historyScreen(ctx) {
   }
 
   const wallet = ctx.wallet;
-  const list = el("div.history", {}, [el("p.dim", { text: "Поднимаем историю…" })]);
+  const list = el("div.history", {}, [el("p.dim", { text: "История загружается…" })]);
 
   const load = async () => {
-    list.replaceChildren(el("p.dim", { text: "Поднимаем историю…" }));
+    list.replaceChildren(el("p.dim", { text: "История загружается…" }));
     try {
       const rows = await fetchHistory(wallet.address.toString({ bounceable: true }), wallet.network);
 
@@ -80,7 +80,6 @@ export function historyScreen(ctx) {
 
   return el("div.screen.stack.history-screen", {}, [
     el("h1.glow", { "data-t": "История", text: "История" }),
-    el("p.lead", { text: "Всё, что происходило с кошельком с первого дня." }),
     list,
     el("div.screen__spacer"),
     el("div.screen__actions", {}, [linkButton("Назад", () => ctx.go("home"))]),

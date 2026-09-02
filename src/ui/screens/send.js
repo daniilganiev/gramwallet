@@ -253,9 +253,11 @@ export function sendScreen(ctx) {
       el("label.field", {}, [el("span.field__label", { text: "Сообщение" }), note]),
     ]),
 
-    el("p.faint", { text: "Если отправляете на этот адрес впервые — начните с маленькой суммы." }),
-
     el("div.screen__spacer"),
-    el("div.screen__actions", {}, [send, linkButton("Назад", () => ctx.go("home"))]),
+    el("div.screen__actions", {}, [
+      send,
+      linkButton("Пакетная отправка", () => ctx.go("batch")),
+      linkButton("Назад", () => ctx.go("home")),
+    ]),
   ]);
 }

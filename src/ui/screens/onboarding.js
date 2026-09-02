@@ -1,6 +1,7 @@
 import { el } from "../dom.js";
-import { diamond, link, linkButton, primaryButton } from "../components.js";
-import { COIN, REPO_URL } from "../../core/constants.js";
+import { diamond, githubMark, link, linkButton, primaryButton } from "../components.js";
+import { openLink } from "../../telegram.js";
+import { APP_REPO_URL, COIN, REPO_URL } from "../../core/constants.js";
 
 /**
  * В окне Telegram на компьютере высоты заметно меньше, чем на телефоне,
@@ -57,7 +58,26 @@ export function introScreen(ctx) {
 
     el("div.screen__spacer"),
 
-    el("div.screen__actions", {}, [primaryButton("Далее", () => ctx.go("safety"))]),
+    el("div.screen__actions", {}, [
+      primaryButton("Далее", () => ctx.go("safety")),
+
+      // Исходники — с первого же экрана: клиент некастодиальный, и первое,
+      // что здесь стоит предложить человеку, — проверить его самому.
+      el(
+        "a.credits__gh.intro__gh",
+        {
+          href: APP_REPO_URL,
+          target: "_blank",
+          rel: "noopener",
+          title: "Исходный код приложения",
+          onclick: (e) => {
+            e.preventDefault();
+            openLink(APP_REPO_URL);
+          },
+        },
+        [githubMark(), el("span", { text: "Исходный код" })],
+      ),
+    ]),
   ]);
 }
 

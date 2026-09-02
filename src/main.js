@@ -14,6 +14,7 @@ import { lockScreen } from "./ui/screens/lock.js";
 import { homeScreen } from "./ui/screens/home.js";
 import { historyScreen } from "./ui/screens/history.js";
 import { sendScreen } from "./ui/screens/send.js";
+import { batchScreen } from "./ui/screens/batch.js";
 import { rotateScreen } from "./ui/screens/rotate.js";
 import { settingsScreen } from "./ui/screens/settings.js";
 
@@ -30,6 +31,7 @@ const SCREENS = {
   home: homeScreen,
   history: historyScreen,
   send: sendScreen,
+  batch: batchScreen,
   rotate: rotateScreen,
   settings: settingsScreen,
 };
@@ -41,6 +43,7 @@ const BACK = {
   verify: "create",
   import: "welcome",
   send: "home",
+  batch: "send",
   settings: "home",
   history: "home",
   rotate: "settings",

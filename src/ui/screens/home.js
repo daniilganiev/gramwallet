@@ -1,11 +1,30 @@
 import { fromNano, toNano } from "@ton/core";
 
 import { el, copyText } from "../dom.js";
-import { diamond, glassButton, iconButton, linkButton, primaryButton, runAction, terminal, toast } from "../components.js";
+import { copyButton, diamond, glassButton, linkButton, primaryButton, runAction, terminal, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { COIN, MIN_DEPLOY_BALANCE } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
 import { fetchJettons, fetchNfts } from "../../core/assets.js";
+
+/**
+ * Последнее, что мы видели на кошельке.
+ *
+ * Живёт вне экрана: при возврате с отправки или из истории цифры должны
+ * стоять на месте сразу, а не мигать заново полосой ожидания. Свежесть
+ * догонит их через секунду сама.
+ */
+const seen = { address: null, balance: null, jettons: null, nfts: null };
+
+/** Баланс спрашиваем часто: это дешёвый запрос к ноде. */
+const BALANCE_EVERY = 5000;
+
+/**
+ * Токены и NFT — редко. Их отдаёт индексатор с лимитом около запроса
+ * в секунду, и на каждый круг их уходит два. Чаще — гарантированные 429
+ * и пустые списки вместо балансов.
+ */
+const ASSETS_EVERY = 30000;
 
 /** Баланс всегда с тремя знаками: цифра не прыгает по ширине при обновлении. */
 function grams(nano) {
@@ -24,21 +43,43 @@ export function homeScreen(ctx) {
   const wallet = ctx.wallet;
   const addressText = wallet.address.toString({ bounceable: false });
 
+  // Кошелёк сменился — прошлые цифры не наши.
+  if (seen.address !== addressText) {
+    seen.address = addressText;
+    seen.balance = null;
+    seen.jettons = null;
+    seen.nfts = null;
+  }
+
+  // Вспышка по плашке — подтверждение прямо там, куда человек нажал.
+  const flash = el("span.address__flash", { "aria-hidden": "true" });
+
   const copy = async () => {
     const ok = await copyText(addressText);
     haptic(ok ? "light" : "error");
+    if (ok) {
+      flash.classList.remove("address__flash--on");
+      // Перезапуск анимации: без чтения раскладки браузер не заметит,
+      // что класс снимали, и второе нажатие пройдёт без вспышки.
+      void flash.offsetWidth;
+      flash.classList.add("address__flash--on");
+    }
     toast(ok ? "Адрес скопирован" : "Не удалось скопировать", { error: !ok });
+    return ok;
   };
 
   const balanceValue = el("span.balance__value");
 
-  // Пока баланс не пришёл, на его месте идёт волна света по силуэту цифры.
-  // Прочерк выглядел как ответ «ноль, и всё», а это ещё вопрос.
+  // Пока баланс не пришёл ни разу, на его месте идёт волна света по силуэту
+  // цифры. Прочерк выглядел как ответ «ноль, и всё», а это ещё вопрос.
   const waiting = () => balanceValue.replaceChildren(el("span.balance__wait"));
   const showBalance = (nano) => {
-    balanceValue.textContent = grams(nano);
+    const text = grams(nano);
+    // Ту же цифру не переписываем: иначе выделение текста слетает на каждом круге.
+    if (balanceValue.textContent !== text) balanceValue.textContent = text;
   };
-  waiting();
+  if (seen.balance === null) waiting();
+  else showBalance(seen.balance);
 
   // Камень у баланса: по нажатию коротко раскручивается и мигает светом.
   // Класс снимаем по концу анимации, иначе второе нажатие ничего не даст.
@@ -69,21 +110,25 @@ export function homeScreen(ctx) {
   const assets = el("div.home__assets");
   const actions = el("div.screen__actions");
 
+  const copyBtn = copyButton("Скопировать адрес", (e) => {
+    e.stopPropagation();
+    return copy();
+  });
+
   const screen = el("div.screen.stack.home", {}, [
     el("h1.glow", { "data-t": "Ваш кошелёк", text: "Ваш кошелёк" }),
 
     // Адрес показываем целиком: по обрезанному нельзя проверить, туда ли
     // отправляешь, а именно этим человек и занимается на этом экране.
     // Нажатие по всей карточке копирует — попасть в неё проще, чем в кнопку.
-    el("div.glass.address", { onclick: copy }, [
+    el("div.glass.address", { onclick: () => copyBtn.run() }, [
+      el("span.address__sheen", { "aria-hidden": "true" }),
+      flash,
       el("div.address__text", {}, [
         el("div", { text: addressText.slice(0, 24) }),
         el("div", { text: addressText.slice(24) }),
       ]),
-      iconButton("⧉", "Скопировать адрес", (e) => {
-        e.stopPropagation();
-        copy();
-      }),
+      copyBtn.node,
     ]),
 
     el("div.balance-box", {}, [
@@ -102,24 +147,71 @@ export function homeScreen(ctx) {
     ]),
   ]);
 
-  /** Списки токенов и NFT. Индексатор может молчать — это не повод падать. */
-  const loadAssets = async () => {
-    assets.replaceChildren(el("p.dim", { text: "Смотрим, что на кошельке…" }));
+  /*
+   * Прокрутка своя, а не scrollIntoView({behavior:"smooth"}).
+   *
+   * Родная плавная прокрутка идёт вне кадрового цикла страницы, и вместе
+   * с исчезновением большого блока браузер пересобирает слои — на телефоне
+   * это видно как рывок. Здесь всё в одном requestAnimationFrame.
+   */
+  const glideTo = (top, ms = 480) =>
+    new Promise((resolve) => {
+      const from = screen.scrollTop;
+      const dist = Math.max(0, top) - from;
+      if (Math.abs(dist) < 1) return resolve();
+      const started = performance.now();
+      const step = (now) => {
+        const t = Math.min(1, (now - started) / ms);
+        // Плавный вход и выход, без рывка в конце.
+        const e = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+        screen.scrollTop = from + dist * e;
+        if (t < 1) requestAnimationFrame(step);
+        else resolve();
+      };
+      requestAnimationFrame(step);
+    });
 
-    const [jettons, nfts] = await Promise.all([
-      fetchJettons(addressText, wallet.network).catch(() => null),
-      fetchNfts(addressText, wallet.network).catch(() => null),
+  /** Подвести блок под верхнюю кромку экрана, оставив немного воздуха. */
+  const glideToNode = (node, pad = 16) =>
+    glideTo(
+      screen.scrollTop + node.getBoundingClientRect().top - screen.getBoundingClientRect().top - pad,
+    );
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /* ---- Токены и NFT ----------------------------------------------------- */
+
+  const section = (title, items, empty, render) =>
+    el("div.assets", {}, [
+      el("div.assets__title", { text: title }),
+      items === null
+        ? el("p.faint", { text: "Не удалось спросить индексатор." })
+        : items.length === 0
+          ? el("p.faint", { text: empty })
+          : el("div.assets__list", {}, items.map(render)),
     ]);
 
-    const section = (title, items, empty, render) =>
-      el("div.assets", {}, [
-        el("div.assets__title", { text: title }),
-        items === null
-          ? el("p.faint", { text: "Не удалось спросить индексатор." })
-          : items.length === 0
-            ? el("p.faint", { text: empty })
-            : el("div.assets__list", {}, items.map(render)),
-      ]);
+  /** Отпечаток списков: пока он тот же, разметку не трогаем вообще. */
+  const stamp = (jettons, nfts) =>
+    JSON.stringify([
+      jettons?.map((j) => [j.jetton, j.amount, j.symbol]) ?? null,
+      nfts?.map((n) => [n.address, n.name, n.collection]) ?? null,
+    ]);
+
+  let painted = null;
+
+  /**
+   * Списки перерисовываем только когда они изменились.
+   *
+   * Раньше на каждый заход экран сначала писал «смотрим, что на кошельке»,
+   * потом подставлял ровно то же самое. Обновление должно быть незаметным:
+   * человек узнаёт о нём по новой цифре, а не по мельтешению блоков.
+   */
+  const paintAssets = (jettons, nfts) => {
+    const next = stamp(jettons, nfts);
+    if (next === painted) return;
+    const first = painted === null;
+    painted = next;
 
     assets.replaceChildren(
       section("Токены", jettons, "Пока пусто.", (j) =>
@@ -135,12 +227,129 @@ export function homeScreen(ctx) {
         ]),
       ),
     );
+    // Первое появление — мягко, дальнейшие правки уже без анимации.
+    assets.classList.toggle("home__in", first);
   };
+
+  const loadAssets = async () => {
+    const [jettons, nfts] = await Promise.all([
+      fetchJettons(addressText, wallet.network).catch(() => null),
+      fetchNfts(addressText, wallet.network).catch(() => null),
+    ]);
+    // Молчание индексатора — не новость: держим на экране прошлые списки.
+    if (jettons === null && nfts === null && painted !== null) return null;
+    seen.jettons = jettons;
+    seen.nfts = nfts;
+    return [jettons, nfts];
+  };
+
+  if (seen.jettons !== null || seen.nfts !== null) paintAssets(seen.jettons, seen.nfts);
+
+  /* ---- Состояние кошелька ------------------------------------------------ */
+
+  // Что сейчас на экране: пока режим не сменился, кнопки не пересобираем —
+  // иначе палец попадает по кнопке, которую только что заменили.
+  let mode = null;
+  let busy = false;
+
+  const showReady = () => {
+    if (mode === "ready") return;
+    mode = "ready";
+    status.replaceChildren();
+    actions.replaceChildren(primaryButton("Отправить", () => ctx.go("send")));
+  };
+
+  const showTopUp = () => {
+    if (mode === "wait") return;
+    mode = "wait";
+    assets.replaceChildren();
+    painted = null;
+    status.replaceChildren(
+      el("div.note", {}, [
+        el("div", { text: `Для деплоя пополни баланс на ${MIN_DEPLOY_BALANCE} ${COIN}.` }),
+        el("div.note__more", { text: "Не рекомендуем отправлять большие суммы." }),
+      ]),
+    );
+
+    const check = el("button.btn.btn--primary", {
+      type: "button",
+      text: "Я пополнил",
+      onclick: () =>
+        runAction(
+          check,
+          async () => {
+            const fresh = await wallet.getState();
+            const now = fresh.balance ?? 0n;
+            seen.balance = now;
+            showBalance(now);
+
+            if (now < toNano(MIN_DEPLOY_BALANCE)) {
+              haptic("error");
+              toast(`Пополнения пока не видно. Нужно хотя бы ${MIN_DEPLOY_BALANCE} ${COIN}.`, {
+                error: true,
+              });
+              return;
+            }
+            await runDeploy(now);
+          },
+          { loadingText: "Проверяем" },
+        ),
+    });
+
+    actions.replaceChildren(check);
+  };
+
+  const showError = (text) => {
+    if (mode === "error") return;
+    mode = "error";
+    status.replaceChildren(el("div.note.note--danger", { text }));
+    actions.replaceChildren();
+  };
+
+  /** Один круг опроса: баланс и признак деплоя. */
+  const pullState = async () => {
+    if (busy) return;
+    try {
+      const state = await wallet.getState();
+      seen.balance = state.balance ?? 0n;
+      showBalance(seen.balance);
+      if (state.state === "active") showReady();
+      else showTopUp();
+    } catch (e) {
+      // Сеть моргнула — прошлые цифры честнее прочерка. Ругаемся только
+      // тогда, когда показывать ещё нечего.
+      if (seen.balance === null) showError(explainError(e));
+    }
+  };
+
+  /** Один круг опроса списков. Только для развёрнутого кошелька. */
+  const pullAssets = async () => {
+    if (busy || mode !== "ready") return;
+    const got = await loadAssets();
+    if (got) paintAssets(got[0], got[1]);
+  };
+
+  /* ---- Деплой ------------------------------------------------------------ */
 
   /** Деплой на глазах: то же окно терминала, что и при создании кошелька. */
   const runDeploy = async (balance) => {
     const term = terminal({ name: "node · javascript", meta: "@ton/ton · ed25519", compact: true });
+
+    /*
+     * Пока идёт деплой, ниже терминала не должно быть ничего.
+     *
+     * Раньше сразу после подтверждения там просыпался список токенов и
+     * кнопка «Отправить»: экран дёргался под руками, а лог читать мешало.
+     * На это время терминал и есть экран, остальное вернётся, когда человек
+     * сам его закроет.
+     */
+    busy = true;
+    mode = "deploy";
+    assets.replaceChildren();
+    actions.replaceChildren();
+    painted = null;
     status.replaceChildren(term.node);
+    glideToNode(term.node);
 
     term.write("$ node deploy.js", "cmd");
     term.write(`Кошелёк: ${addressText}`, "val");
@@ -149,13 +358,23 @@ export function homeScreen(ctx) {
     term.write("Подпись ed25519 — на этом устройстве.", "out");
     term.write("Отправляем в сеть и ждём подтверждения…", "wait");
 
+    /** Кнопка живёт при логе, а не внизу экрана: она относится к нему. */
+    const under = (label, onclick) => status.append(glassButton(label, onclick));
+
+    /** Выйти из режима деплоя: дальше экран снова живёт сам. */
+    const resume = () => {
+      busy = false;
+      mode = null;
+      pullState();
+    };
+
     try {
       const res = await wallet.deploy();
       if (!res.confirmed) {
         term.write("Сообщение ушло, подтверждения пока нет.", "wait");
         term.write("Сеть иногда думает дольше минуты — нажми «Обновить».", "out");
         term.done();
-        actions.replaceChildren(glassButton("Обновить", () => refresh()));
+        under("Обновить", resume);
         return;
       }
       term.write(`seqno: ${res.seqno} → ${res.seqno + 1}`, "val");
@@ -166,84 +385,60 @@ export function homeScreen(ctx) {
       /*
        * Терминал не убираем сам. Это единственное место, где видно, что
        * именно ушло в сеть, — человек вправе его перечитать и пролистать.
-       * Убирает он его сам, кнопкой; всё остальное на экране обновляем
-       * молча, не трогая лог.
+       * Свежий баланс и списки готовим молча, в фоне: к моменту закрытия
+       * всё уже на месте, и ждать второй раз не придётся.
        */
-      status.append(glassButton("Закрыть терминал", () => refresh()));
+      const ready = Promise.all([
+        wallet.getState().then((s) => s.balance ?? 0n).catch(() => null),
+        loadAssets().catch(() => null),
+      ]);
 
-      try {
-        const after = await wallet.getState();
-        showBalance(after.balance ?? 0n);
+      under("Закрыть терминал", async () => {
+        haptic("light");
+        const [fresh, list] = await ready;
+
+        /*
+         * Сначала возвращаем взгляд наверх и только потом убираем лог.
+         * Если снять его сразу, страница схлопывается под скроллом, и экран
+         * прыгает сам — это и выглядело как рывок к балансу.
+         */
+        await glideTo(0);
+        status.classList.add("home__status--out");
+        await sleep(260);
+
+        status.classList.remove("home__status--out");
+        status.replaceChildren();
+
+        busy = false;
+        mode = "ready";
+        if (fresh !== null) {
+          seen.balance = fresh;
+          showBalance(fresh);
+        }
         actions.replaceChildren(primaryButton("Отправить", () => ctx.go("send")));
-        await loadAssets();
-      } catch {
-        // Цифры подождут: сам деплой уже подтверждён, и это главное.
-      }
+        actions.classList.add("home__in");
+        if (list) paintAssets(list[0], list[1]);
+        else pullAssets();
+      });
     } catch (e) {
       term.write(explainError(e), "danger");
       term.done();
-      actions.replaceChildren(glassButton("Попробовать снова", () => refresh()));
+      under("Попробовать снова", resume);
     }
   };
 
-  const refresh = async () => {
-    waiting();
-    try {
-      const state = await wallet.getState();
-      const deployed = state.state === "active";
-      const balance = state.balance ?? 0n;
-      showBalance(balance);
+  /* ---- Ход экрана -------------------------------------------------------- */
 
-      if (deployed) {
-        status.replaceChildren();
-        actions.replaceChildren(primaryButton("Отправить", () => ctx.go("send")));
-        await loadAssets();
-        return;
-      }
+  /*
+   * Экран сам держит цифры свежими, пока открыт. Роутер экраны просто
+   * заменяет, отдельного «закрыть» у него нет, поэтому признак жизни —
+   * связь с документом: как только узел из него вышел, таймеры снимаем.
+   */
+  const timers = [
+    setInterval(() => (screen.isConnected ? pullState() : timers.forEach(clearInterval)), BALANCE_EVERY),
+    setInterval(() => (screen.isConnected ? pullAssets() : timers.forEach(clearInterval)), ASSETS_EVERY),
+  ];
 
-      assets.replaceChildren();
-      status.replaceChildren(
-        el("div.note", {}, [
-          el("div", { text: `Для деплоя пополни баланс на ${MIN_DEPLOY_BALANCE} ${COIN}.` }),
-          el("div.note__more", { text: "Не рекомендуем отправлять большие суммы." }),
-        ]),
-      );
-
-      const check = el("button.btn.btn--primary", {
-        type: "button",
-        text: "Я пополнил",
-        onclick: () =>
-          runAction(
-            check,
-            async () => {
-              waiting();
-              const fresh = await wallet.getState();
-              const now = fresh.balance ?? 0n;
-              showBalance(now);
-
-              if (now < toNano(MIN_DEPLOY_BALANCE)) {
-                haptic("error");
-                toast(`Пополнения пока не видно. Нужно хотя бы ${MIN_DEPLOY_BALANCE} ${COIN}.`, {
-                  error: true,
-                });
-                return;
-              }
-              await runDeploy(now);
-            },
-            { loadingText: "Проверяем" },
-          ),
-      });
-
-      actions.replaceChildren(check);
-    } catch (e) {
-      balanceValue.textContent = "—";
-      status.replaceChildren(
-        el("div.note.note--danger", { text: explainError(e) }),
-        glassButton("Повторить", () => refresh()),
-      );
-    }
-  };
-
-  refresh();
+  pullState().then(pullAssets);
   return screen;
 }

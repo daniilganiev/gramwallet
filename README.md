@@ -12,10 +12,10 @@ https://github.com/ton-blockchain/tg-wallet-contract
 
 ## Экраны
 
-| | | | |
-| --- | --- | --- | --- |
-| ![О кошельке](docs/screens/01-about.png) | ![Создание](docs/screens/02-forge.png) | ![Кошелёк](docs/screens/03-home.png) | ![Смена фразы](docs/screens/04-rotate.png) |
-| О кошельке | Создание кошелька | Кошелёк | Смена seed-фразы |
+| | | | | |
+| --- | --- | --- | --- | --- |
+| ![О кошельке](docs/screens/01-about.png) | ![Создание](docs/screens/02-forge.png) | ![Кошелёк](docs/screens/03-home.png) | ![Смена фразы](docs/screens/04-rotate.png) | ![Пакетная отправка](docs/screens/05-batch.png) |
+| О кошельке | Создание кошелька | Кошелёк | Смена seed-фразы | Пакетная отправка |
 
 ---
 

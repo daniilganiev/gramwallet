@@ -2165,7 +2165,8 @@ textarea.input {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--safe-bottom) + 24px);
+  /* Выше нижнего ряда кнопок: раньше тост ложился прямо на «Историю». */
+  bottom: calc(var(--safe-bottom) + 92px);
   z-index: 50;
   transform: translateX(-50%);
   max-width: calc(100% - 40px);
@@ -2420,26 +2421,6 @@ textarea.input {
   line-height: 1.65;
   text-align: center;
   color: var(--ink);
-}
-
-/* Круглая кнопка-иконка на светлой карточке. */
-.btn-icon {
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.86);
-  color: var(--ink);
-  font-size: 17px;
-  line-height: 1;
-  cursor: pointer;
-  transition: transform 0.12s var(--ease), background 0.2s var(--ease);
-}
-
-.btn-icon:active {
-  transform: scale(0.92);
-  background: #ffffff;
 }
 
 /*
@@ -3003,4 +2984,335 @@ textarea.input {
 
 .rotate .screen__hint {
   max-width: none;
+}
+
+/* --- Пакетная отправка --------------------------------------------------- */
+
+.batch__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.batch__row + .batch__row {
+  margin-top: 8px;
+}
+
+/*
+ * Адрес занимает всё оставшееся место, сумма — фиксированную колонку:
+ * так строки выстраиваются в столбец и пакет читается как таблица.
+ */
+.batch__row .batch__to {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  padding: 12px 12px;
+}
+
+.batch__row .batch__amount {
+  flex: 0 0 84px;
+  text-align: right;
+  padding: 12px 10px;
+}
+
+.batch__drop {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink-faint);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.batch__drop:active {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.batch__tools {
+  display: flex;
+  gap: 10px;
+  margin-top: var(--sp-2);
+}
+
+.batch__tools .btn {
+  flex: 1;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.batch__total {
+  margin-top: var(--sp-2);
+  font-size: 14px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.batch__total--bad {
+  color: #e8b4b4;
+}
+
+/* --- Свет по плашке адреса ------------------------------------------------ */
+
+/*
+ * По полированному хрому должен ходить свет. Плашка с адресом висит на
+ * экране дольше всего остального, и неподвижный металл рядом с живым камнем
+ * выглядит мёртвым. Двигаем только transform: полосы едут в композиторе и
+ * саму карточку не перерисовывают.
+ */
+.address__sheen {
+  position: absolute;
+  inset: -25% -12%;
+  z-index: 0;
+  pointer-events: none;
+  /*
+   * Плашка овальная, а полоса света — прямоугольник: у скруглённых торцов
+   * её край читался как угол. Маска гасит свет к краям, и пятно получает
+   * форму самой плашки.
+   */
+  -webkit-mask-image: radial-gradient(ellipse 62% 120% at 50% 50%, #000 30%, rgba(0, 0, 0, 0.55) 62%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 120% at 50% 50%, #000 30%, rgba(0, 0, 0, 0.55) 62%, transparent 100%);
+}
+
+.address__sheen::before,
+.address__sheen::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  transform: translate3d(-180%, 0, 0) skewX(-18deg);
+}
+
+/*
+ * Первая волна — блик. Белым по светлому металлу его почти не видно,
+ * поэтому у полосы есть тёмные края: глаз ловит именно перепад, а не
+ * саму яркость.
+ */
+.address__sheen::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(40, 46, 58, 0.1) 22%,
+    rgba(255, 255, 255, 1) 48%,
+    rgba(255, 255, 255, 0.75) 56%,
+    rgba(40, 46, 58, 0.1) 78%,
+    transparent
+  );
+  animation: address-sheen 7.5s ease-in-out 0.6s infinite;
+}
+
+/*
+ * Вторая — спектральная. На полированном хроме свет всегда раскладывается
+ * в цвет по кромке; overlay кладёт её в сам металл, а не поверх него.
+ */
+.address__sheen::after {
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(90, 169, 255, 0.42) 26%,
+    rgba(167, 139, 250, 0.4) 44%,
+    rgba(251, 159, 196, 0.4) 62%,
+    rgba(253, 230, 138, 0.34) 78%,
+    transparent
+  );
+  mix-blend-mode: overlay;
+  animation: address-sheen 9.5s ease-in-out 2.6s infinite;
+}
+
+@keyframes address-sheen {
+  0% {
+    transform: translate3d(-180%, 0, 0) skewX(-18deg);
+  }
+  /* Волна проходит за треть цикла, остальное — пауза за краем карточки. */
+  36%,
+  100% {
+    transform: translate3d(460%, 0, 0) skewX(-18deg);
+  }
+}
+
+/* Текст и кнопка — над светом, иначе блик размывает адрес. */
+.address__text,
+.address .btn-copy {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .address__sheen {
+    display: none;
+  }
+}
+
+/* --- Кнопка «скопировать» ------------------------------------------------- */
+
+/*
+ * Не белый кружок поверх металла, а углубление в нём: тёмная заливка, тень
+ * по верхней кромке и свет по нижней. По нажатию контур на секунду меняется
+ * на галочку — подтверждение видно на самой кнопке, а не только в тосте,
+ * который легко пропустить.
+ */
+.btn-copy {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 50%;
+  background: rgba(14, 16, 20, 0.07);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6);
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition:
+    transform 0.16s var(--spring),
+    color 0.22s var(--ease),
+    background 0.22s var(--ease);
+}
+
+.btn-copy svg {
+  width: 19px;
+  height: 19px;
+}
+
+.btn-copy:active {
+  transform: scale(0.9);
+  background: rgba(14, 16, 20, 0.13);
+  color: var(--ink);
+}
+
+.btn-copy--done {
+  color: #1c7d52;
+  background: rgba(52, 211, 153, 0.16);
+}
+
+/* --- Возвращение экрана после терминала ----------------------------------- */
+
+/*
+ * Лог уходит не мгновенно. Если снять его сразу, страница схлопывается под
+ * скроллом и экран прыгает сам: сначала плавно уводим взгляд наверх, потом
+ * гасим блок, и только потом он покидает разметку.
+ */
+.home__status {
+  transition: opacity 0.26s var(--ease);
+}
+
+.home__status--out {
+  opacity: 0;
+}
+
+/* Всё, что вернулось на экран, проявляется, а не возникает рывком. */
+.home__in {
+  animation: home-in 0.4s var(--ease) both;
+}
+
+@keyframes home-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Адрес в резервной копии — под словами, а не поверх них. */
+.modal__sheet .words {
+  margin-top: var(--sp-3);
+}
+
+.backup__address {
+  margin-top: var(--sp-3);
+}
+
+.modal__sheet .backup__address + .btn {
+  margin-top: var(--sp-3);
+}
+
+/* --- Настройки ------------------------------------------------------------ */
+
+/*
+ * Справка и ключи стоят ниже заголовка: экран короткий, и прижатые к шапке
+ * блоки делают его похожим на список настроек системы, а не на наш.
+ */
+.settings__card {
+  margin-top: var(--air-lg);
+}
+
+.settings__keys {
+  margin-top: var(--air-lg);
+}
+
+/* Список операций начинается не вплотную к заголовку. */
+.history {
+  margin-top: var(--air-md);
+}
+
+/* Ссылка на исходники под кнопкой первого экрана. */
+.intro__gh {
+  align-self: center;
+  margin-top: var(--sp-1);
+  font-size: 14px;
+}
+
+/* --- Отклик плашки адреса ------------------------------------------------- */
+
+/*
+ * Копирование ничем себя не выдавало: адрес выделить нельзя, тост уходит
+ * вниз, и человек не понимал, сработало ли нажатие. Теперь плашка коротко
+ * проседает под пальцем, а по копированию по ней проходит вспышка света.
+ */
+.address {
+  transition: transform 0.18s var(--spring);
+}
+
+.address:active {
+  transform: scale(0.985);
+}
+
+.address__flash {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 70% 130% at 50% 50%,
+    rgba(255, 255, 255, 0.95),
+    rgba(255, 255, 255, 0.35) 45%,
+    transparent 72%
+  );
+}
+
+.address__flash--on {
+  animation: address-flash 0.6s var(--ease);
+}
+
+@keyframes address-flash {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .address:active {
+    transform: none;
+  }
+  .address__flash--on {
+    animation: none;
+  }
 }
