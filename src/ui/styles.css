@@ -3353,12 +3353,17 @@ textarea.input {
  * и неподвижную подпись глаз проскакивает. Качание медленное и мелкое —
  * это приглашение, а не тревога.
  */
+/* Пилюля стоит посередине свободного места и чуть правее центра. */
+.whatsnew-slot {
+  display: flex;
+  justify-content: center;
+  padding-left: 96px;
+}
+
 .whatsnew {
-  align-self: center;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: var(--air-sm);
   padding: 9px 16px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: var(--r-btn);
@@ -3405,5 +3410,32 @@ textarea.input {
 @media (prefers-reduced-motion: reduce) {
   .whatsnew {
     animation: none;
+  }
+}
+
+/* Заглушка списков: держит высоту, пока индексатор ещё не ответил. */
+.asset__skel {
+  display: inline-block;
+  width: 84px;
+  height: 13px;
+  border-radius: 12px;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.05) 22%,
+    rgba(190, 220, 255, 0.18) 44%,
+    rgba(255, 255, 255, 0.05) 66%
+  );
+  background-size: 280% 100%;
+  animation: balance-wait 1.6s linear infinite;
+}
+
+.asset__skel--sm {
+  width: 46px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asset__skel {
+    animation: none;
+    background: rgba(255, 255, 255, 0.08);
   }
 }

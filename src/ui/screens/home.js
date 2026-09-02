@@ -14,7 +14,7 @@ import { fetchJettons, fetchNfts } from "../../core/assets.js";
  * стоять на месте сразу, а не мигать заново полосой ожидания. Свежесть
  * догонит их через секунду сама.
  */
-const seen = { address: null, balance: null, jettons: null, nfts: null };
+const seen = { address: null, balance: null, jettons: null, nfts: null, deployed: null };
 
 /** Баланс спрашиваем часто: это дешёвый запрос к ноде. */
 const BALANCE_EVERY = 5000;
@@ -49,6 +49,7 @@ export function homeScreen(ctx) {
     seen.balance = null;
     seen.jettons = null;
     seen.nfts = null;
+    seen.deployed = null;
   }
 
   // Вспышка по плашке — подтверждение прямо там, куда человек нажал.
@@ -160,13 +161,16 @@ export function homeScreen(ctx) {
       el("div.balance", {}, [gem, balanceValue, el("span.balance__coin", { text: COIN })]),
     ]),
 
-    whatsNew,
-
     status,
     assets,
     actions,
 
+    // Плашка висит в пустом месте между кнопкой и нижним рядом: два
+    // распорки по бокам держат её ровно посередине этого промежутка.
     el("div.screen__spacer"),
+    el("div.whatsnew-slot", {}, [whatsNew]),
+    el("div.screen__spacer"),
+
     el("div.home__nav", {}, [
       linkButton("История", () => ctx.go("history")),
       linkButton("Настройки", () => ctx.go("settings")),
@@ -233,7 +237,7 @@ export function homeScreen(ctx) {
    * потом подставлял ровно то же самое. Обновление должно быть незаметным:
    * человек узнаёт о нём по новой цифре, а не по мельтешению блоков.
    */
-  const paintAssets = (jettons, nfts) => {
+  const paintAssets = (jettons, nfts, fromCache = false) => {
     const next = stamp(jettons, nfts);
     if (next === painted) return;
     const first = painted === null;
@@ -253,8 +257,9 @@ export function homeScreen(ctx) {
         ]),
       ),
     );
-    // Первое появление — мягко, дальнейшие правки уже без анимации.
-    assets.classList.toggle("home__in", first);
+    // Мягко проявляется только первый показ за сеанс. Возврат с другого экрана
+    // рисует списки из памяти сразу — мигать там нечему.
+    assets.classList.toggle("home__in", first && !fromCache);
   };
 
   const loadAssets = async () => {
@@ -269,7 +274,28 @@ export function homeScreen(ctx) {
     return [jettons, nfts];
   };
 
-  if (seen.jettons !== null || seen.nfts !== null) paintAssets(seen.jettons, seen.nfts);
+  /**
+   * Пока о токенах ничего не известно, на их месте стоят те же две секции
+   * с полосой ожидания. Блоки не должны появляться и пропадать: кнопки под
+   * ними прыгали бы по экрану на каждом заходе.
+   */
+  const skeleton = () =>
+    assets.replaceChildren(
+      ...["Токены", "NFT"].map((title) =>
+        el("div.assets", {}, [
+          el("div.assets__title", { text: title }),
+          el("div.assets__list", {}, [
+            el("div.asset", {}, [
+              el("span.asset__skel"),
+              el("span.asset__skel.asset__skel--sm"),
+            ]),
+          ]),
+        ]),
+      ),
+    );
+
+  if (seen.jettons !== null || seen.nfts !== null) paintAssets(seen.jettons, seen.nfts, true);
+  else skeleton();
 
   /* ---- Состояние кошелька ------------------------------------------------ */
 
@@ -338,8 +364,9 @@ export function homeScreen(ctx) {
     try {
       const state = await wallet.getState();
       seen.balance = state.balance ?? 0n;
+      seen.deployed = state.state === "active";
       showBalance(seen.balance);
-      if (state.state === "active") showReady();
+      if (seen.deployed) showReady();
       else showTopUp();
     } catch (e) {
       // Сеть моргнула — прошлые цифры честнее прочерка. Ругаемся только
@@ -464,6 +491,14 @@ export function homeScreen(ctx) {
     setInterval(() => (screen.isConnected ? pullState() : timers.forEach(clearInterval)), BALANCE_EVERY),
     setInterval(() => (screen.isConnected ? pullAssets() : timers.forEach(clearInterval)), ASSETS_EVERY),
   ];
+
+  /*
+   * Кнопку рисуем до первого ответа сети — по прошлому известному состоянию.
+   * Иначе при каждом возврате с другой страницы она пропадала на секунду и
+   * появлялась заново, утаскивая за собой весь низ экрана.
+   */
+  if (seen.deployed === true) showReady();
+  else if (seen.deployed === false) showTopUp();
 
   pullState().then(pullAssets);
   return screen;

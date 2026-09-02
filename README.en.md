@@ -12,10 +12,20 @@ client for an open contract.
 
 ## Screens
 
-| | | | | |
-| --- | --- | --- | --- | --- |
-| ![About](docs/screens/01-about.png) | ![Creation](docs/screens/02-forge.png) | ![Wallet](docs/screens/03-home.png) | ![Key rotation](docs/screens/04-rotate.png) | ![Batch send](docs/screens/05-batch.png) |
-| About the wallet | Wallet creation | Wallet | Changing the seed phrase | Batch send |
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/screens/03-home.png" width="100%" alt="Wallet"><br><sub>Wallet</sub></td>
+<td width="50%" align="center"><img src="docs/screens/04-batch.png" width="100%" alt="Batch send"><br><sub>Batch send</sub></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="33%" align="center"><img src="docs/screens/01-about.png" width="100%" alt="About the wallet"><br><sub>About the wallet</sub></td>
+<td width="33%" align="center"><img src="docs/screens/02-forge.png" width="100%" alt="Wallet creation"><br><sub>Wallet creation</sub></td>
+<td width="34%" align="center"><img src="docs/screens/05-rotate.png" width="100%" alt="Changing the seed phrase"><br><sub>Changing the seed phrase</sub></td>
+</tr>
+</table>
 
 ---
 

@@ -12,10 +12,20 @@ https://github.com/ton-blockchain/tg-wallet-contract
 
 ## Экраны
 
-| | | | | |
-| --- | --- | --- | --- | --- |
-| ![О кошельке](docs/screens/01-about.png) | ![Создание](docs/screens/02-forge.png) | ![Кошелёк](docs/screens/03-home.png) | ![Смена фразы](docs/screens/04-rotate.png) | ![Пакетная отправка](docs/screens/05-batch.png) |
-| О кошельке | Создание кошелька | Кошелёк | Смена seed-фразы | Пакетная отправка |
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/screens/03-home.png" width="100%" alt="Кошелёк"><br><sub>Кошелёк</sub></td>
+<td width="50%" align="center"><img src="docs/screens/04-batch.png" width="100%" alt="Пакетная отправка"><br><sub>Пакетная отправка</sub></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="33%" align="center"><img src="docs/screens/01-about.png" width="100%" alt="О кошельке"><br><sub>О кошельке</sub></td>
+<td width="33%" align="center"><img src="docs/screens/02-forge.png" width="100%" alt="Создание кошелька"><br><sub>Создание кошелька</sub></td>
+<td width="34%" align="center"><img src="docs/screens/05-rotate.png" width="100%" alt="Смена seed-фразы"><br><sub>Смена seed-фразы</sub></td>
+</tr>
+</table>
 
 ---
 
