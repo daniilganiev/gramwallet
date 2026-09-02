@@ -3345,3 +3345,65 @@ textarea.input {
 .rotate .word {
   padding: 9px 10px;
 }
+
+/* --- «Что нового» --------------------------------------------------------- */
+
+/*
+ * Плашка качается сама: на главном экране, кроме камня, ничего не движется,
+ * и неподвижную подпись глаз проскакивает. Качание медленное и мелкое —
+ * это приглашение, а не тревога.
+ */
+.whatsnew {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--air-sm);
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--r-btn);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transform-origin: 50% 140%;
+  animation: whatsnew-sway 5.2s ease-in-out infinite;
+}
+
+.whatsnew__spark {
+  color: #bcd9ff;
+  font-size: 13px;
+}
+
+.whatsnew:active {
+  animation: none;
+  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@keyframes whatsnew-sway {
+  0%,
+  100% {
+    transform: rotate(-2.2deg);
+  }
+  50% {
+    transform: rotate(2.2deg);
+  }
+}
+
+/* Пункты в листе «Что нового»: не абзацы, а перечисление. */
+.whatsnew__list {
+  margin: var(--sp-2) 0;
+}
+
+.whatsnew__item {
+  margin-top: 8px;
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .whatsnew {
+    animation: none;
+  }
+}

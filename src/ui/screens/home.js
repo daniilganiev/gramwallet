@@ -1,7 +1,7 @@
 import { fromNano, toNano } from "@ton/core";
 
 import { el, copyText } from "../dom.js";
-import { copyButton, diamond, glassButton, linkButton, primaryButton, runAction, terminal, toast } from "../components.js";
+import { copyButton, diamond, glassButton, linkButton, primaryButton, runAction, sheet, terminal, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { COIN, MIN_DEPLOY_BALANCE } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
@@ -115,6 +115,30 @@ export function homeScreen(ctx) {
     return copy();
   });
 
+  /*
+   * «Что нового» покачивается: на главном экране нет ничего движущегося,
+   * кроме камня, и неподвижную плашку человек просто не замечает.
+   */
+  const whatsNew = el("button.whatsnew", {
+    type: "button",
+    onclick: () => {
+      haptic("light");
+      sheet({
+        title: "Что нового",
+        body: el("div", {}, [
+          el("p", { text: "В этой версии кошелька ты можешь протестировать ключевые доступные функции:" }),
+          el("div.whatsnew__list", {}, [
+            el("div.whatsnew__item", { text: "1. Смену seed-фразы — в настройках." }),
+            el("div.whatsnew__item", { text: "2. Пакетную отправку — кнопка «Отправить», внизу «Пакетная отправка»." }),
+          ]),
+          el("p", { text: "После того как запустится официальный Gram Wallet, этот кошелёк должен открыться там." }),
+        ]),
+        confirmText: null,
+        cancelText: "Закрыть",
+      });
+    },
+  }, [el("span.whatsnew__spark", { text: "✦" }), el("span", { text: "Что нового" })]);
+
   const screen = el("div.screen.stack.home", {}, [
     el("h1.glow", { "data-t": "Ваш кошелёк", text: "Ваш кошелёк" }),
 
@@ -135,6 +159,8 @@ export function homeScreen(ctx) {
       el("div.balance__label", { text: "Баланс" }),
       el("div.balance", {}, [gem, balanceValue, el("span.balance__coin", { text: COIN })]),
     ]),
+
+    whatsNew,
 
     status,
     assets,
