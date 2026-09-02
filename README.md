@@ -1,8 +1,5 @@
 # Gram Wallet
 
-Open-source non-custodial client built on WalletTg. Test & explore the new
-contract.
-
 Telegram Mini App — некастодиальный кошелёк для GRAM на контракте WalletTg:
 https://github.com/ton-blockchain/tg-wallet-contract
 
@@ -59,7 +56,7 @@ https://github.com/ton-blockchain/tg-wallet-contract
 главное обещание приложения.
 
 Seed-фраза живёт только в `localStorage`, зашифрованная PIN-кодом.
-Подробно — в разделе «Как устроена защита».
+Подробно — в разделе «Защита».
 
 `Telegram.WebApp.CloudStorage` для seed-фразы не используется никогда — это
 серверы Telegram.
