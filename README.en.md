@@ -21,41 +21,45 @@ client for an open contract.
 
 ## What it does
 
-The contract features it exists for are implemented.
+Three things ordinary TON wallets do not have. The contract exists for them.
 
-Seed phrase rotation without changing the address. The key changes while the
-address, balance and history stay the same — nobody who pays you needs to be
-told anything. It can be repeated any number of times.
+### Change the seed phrase, keep the address
 
-Up to 255 transfers in a single transaction: messages are encoded as a chain
-of chunks, the way the contract expects.
+Phrase compromised — rotate it and carry on with the same address. Balance,
+history and payment details stay untouched: nobody has to be notified. On v3
+and v4 this meant a new wallet and moving every coin to it.
 
-Upgrades without migration. The logic lives on-chain, so there is no moving to
-a new wallet the way v3 and v4 required.
+### 255 transfers in one transaction
 
-The rest is ordinary wallet work.
+One signature, one network fee, up to 255 recipients. Payroll, payouts,
+airdrops — all in a single batch.
 
-Wallet creation. The 24-word phrase and the key are computed on the device;
-the log prints the same values the console version does — public key, both
-address forms, storage cell size.
+### Upgrades without migration
 
-Deployment. The contract appears on-chain after the first top-up, in a single
-operation paid from the wallet itself. It runs in view, in the same terminal.
+The logic lives on-chain and is updated by validator vote. The wallet will not
+go stale the way v3 and v4 did — no moving funds to a newer version.
 
-Balance, tokens and NFTs. The list comes from a public indexer. Images are
-deliberately not loaded: the image URL is chosen by the token issuer, and
-fetching it would disclose the owner's address to them.
+### Everything else a wallet needs
 
-Transfers. GRAM, jettons (TEP-74) and NFTs (TEP-62) from one screen. The fee
-is estimated by a node before signing and shown in the confirmation.
+Creation — the 24-word phrase and the key are computed on the device, and the
+log prints the same values the console version does.
 
-History. Indexer events in the form explorers show them: incoming and outgoing
-transfers, token and NFT moves, deployment. Every entry links to Tonviewer.
+Deployment — the contract appears on-chain after the first top-up, in a single
+operation paid from the wallet itself, in plain view.
 
-Recovery. By phrase, or — if the key was rotated — by phrase together with the
-address. A phrase from Tonkeeper or the Telegram wallet is detected and
-rejected with the wallet type and its address, instead of showing an empty
-balance.
+Balance, tokens and NFTs — from a public indexer. Images are deliberately not
+loaded: the image URL is chosen by the token issuer, and fetching it would
+disclose the owner's address to them.
+
+Transfers — GRAM, jettons (TEP-74) and NFTs (TEP-62) from one screen, with a
+fee estimate before signing.
+
+History — events in the form explorers show them, every entry links to
+Tonviewer.
+
+Recovery — by phrase, or by phrase together with the address after a rotation.
+A phrase from Tonkeeper or the Telegram wallet is detected and rejected with
+the wallet type and its address, instead of an empty balance.
 
 ---
 
