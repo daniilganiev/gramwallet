@@ -1,9 +1,9 @@
 {
-  "name": "gram-wallet-unofficial",
+  "name": "gram-wallet",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Неофициальный Mini App кошелёк для GRAM на контракте WalletTg",
+  "description": "Mini App кошелёк для GRAM на контракте WalletTg",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
