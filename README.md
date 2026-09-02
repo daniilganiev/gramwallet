@@ -13,16 +13,10 @@ https://github.com/ton-blockchain/tg-wallet-contract
 
 ## Экраны
 
-| | | |
-| --- | --- | --- |
-| ![Знакомство](docs/screens/01-intro.png) | ![О кошельке](docs/screens/02-about.png) | ![Начало](docs/screens/03-welcome.png) |
-| Знакомство | О кошельке | Начало |
-| ![Создание](docs/screens/04-forge.png) | ![Seed-фраза](docs/screens/05-seed.png) | ![PIN](docs/screens/06-pin.png) |
-| Создание кошелька | Seed-фраза | PIN |
-| ![Кошелёк](docs/screens/07-home.png) | ![Отправка](docs/screens/08-send.png) | ![История](docs/screens/09-history.png) |
-| Кошелёк | Отправка | История |
-
-Seed-фраза на снимке подставная — настоящей в репозитории нет.
+| | | | |
+| --- | --- | --- | --- |
+| ![О кошельке](docs/screens/01-about.png) | ![Создание](docs/screens/02-forge.png) | ![Кошелёк](docs/screens/03-home.png) | ![Смена фразы](docs/screens/04-rotate.png) |
+| О кошельке | Создание кошелька | Кошелёк | Смена seed-фразы |
 
 ---
 
