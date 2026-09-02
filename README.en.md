@@ -1,4 +1,4 @@
-[Русский](README.md) · **English**
+[Русский](README.md) · **English** · [MIT License](LICENSE)
 
 # Gram Wallet
 
