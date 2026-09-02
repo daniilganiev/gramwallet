@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0E1013" />
+    <meta
+      name="description"
+      content="Неофициальный кошелёк для GRAM на контракте WalletTg. Ключ хранится только на вашем устройстве."
+    />
+    <title>Gram Wallet unofficial</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!--
+      Стикер лежит на втором экране, но весит заметно: без предзагрузки
+      он появляется рывком уже после перехода.
+    -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-cyrillic.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-latin.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/manrope-cyrillic.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/unbounded-latin.woff2" crossorigin />
+    <!--
+      Кириллица Unbounded нужна только на втором экране. Без предзагрузки
+      браузер спохватывается ровно в момент перехода, и заголовок успевает
+      мелькнуть запасным шрифтом.
+    -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/unbounded-cyrillic.woff2" crossorigin />
+    <link rel="preload" as="image" href="/utya.gif" />
+      <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Cpath d=%27M35 24h30l27 20-42 49-42-49z%27 fill=%27%23cfe0f5%27/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>Для работы кошелька нужен включённый JavaScript.</noscript>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

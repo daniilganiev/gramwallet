@@ -1,0 +1,24 @@
+{
+  "name": "gram-wallet-unofficial",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Неофициальный Mini App кошелёк для GRAM на контракте WalletTg",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node test/encoding.test.js && node test/rotation.test.js && node test/vault.test.js"
+  },
+  "dependencies": {
+    "@orbs-network/ton-access": "^2.3.3",
+    "@ton/core": "^0.63.1",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^16.3.0",
+    "hash-wasm": "^4.12.0"
+  },
+  "devDependencies": {
+    "vite": "^8.2.2",
+    "vite-plugin-node-polyfills": "^0.28.0"
+  }
+}

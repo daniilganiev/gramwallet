@@ -1,0 +1,3006 @@
+/* =========================================================================
+   Gram Wallet unofficial — дизайн-система
+   Графит с зерном, liquid glass, синие волны.
+
+   Ограничение: Telegram webview на среднем Android. Поэтому backdrop-filter
+   применяется точечно, анимируются только transform и opacity, а зерно
+   статичное — анимировать шум значит уронить fps.
+   ========================================================================= */
+
+:root {
+  /*
+   * Тёмный, но не мёртвый. Чёрный на референсах работает только потому,
+   * что по нему идёт спектральный луч — без света это просто пустота.
+   */
+  --bg-0: #08090b;
+  --bg-1: #101216;
+  --bg-2: #191c21;
+  --bg-hi: #262a31;
+
+  /*
+   * У Space Grotesk нет кириллицы: все русские заголовки уезжали в системный
+   * шрифт и выглядели по-разному на iOS и Android. Manrope того же склада,
+   * но с полноценной кириллицей.
+   */
+  --font-display: "Manrope Variable", Manrope, system-ui, sans-serif;
+  --font-chrome: "Unbounded Variable", "Unbounded", var(--font-display);
+  --font-text: "Inter Variable", Inter, system-ui, -apple-system, sans-serif;
+
+  --glass: rgba(255, 255, 255, 0.06);
+  --glass-strong: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.1);
+
+  /* Акцент — не краска, а свет: серебро. Цвет приходит только радугой по кромке. */
+  --accent: #e8ecf2;
+  --accent-2: #ffffff;
+  --accent-deep: #8b93a1;
+
+  /* Текст на светлом хроме: внутри карточек палитра инвертируется. */
+  --ink: #16181c;
+  --ink-dim: #4a4f58;
+  --ink-faint: #6b717b;
+
+  --text: #f2f4f8;
+  --text-dim: #9aa1ad;
+  --text-faint: #676d78;
+
+  --danger: #ff5a5a;
+  --success: #34d399;
+  --warn: #fbbf24;
+
+  /* Формы органические: скругления крупные, ближе к «капле», чем к карточке. */
+  --r-card: 32px;
+  --r-btn: 999px;
+  --r-field: 18px;
+
+  /* Воздух. Интерфейс должен дышать: поля шире, блоки реже. */
+  --pad: 24px;
+  --gap: 20px;
+
+  /*
+   * Вертикальный ритм. Любой отступ между блоками берётся отсюда —
+   * произвольные числа в разметке расходятся уже через пару правок,
+   * и экран начинает выглядеть собранным на глаз.
+   */
+  --sp-1: 6px;
+  --sp-2: 12px;
+  --sp-3: 18px;
+  --sp-4: 26px;
+  --sp-5: 38px;
+
+  /*
+   * Те же интервалы, но зависящие от высоты экрана: на телефоне дают
+   * воздух, в невысоком окне Telegram на компьютере сами поджимаются.
+   */
+  --air-sm: clamp(10px, 1.8vh, 18px);
+  --air-md: clamp(16px, 3vh, 30px);
+  --air-lg: clamp(22px, 4.2vh, 44px);
+
+  /* Межстрочные интервалы: плотный для заголовков, читаемый для текста. */
+  --lh-tight: 1.1;
+  --lh-text: 1.62;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Пружина с лёгким перелётом — «жидкая» реакция на касание. */
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /*
+   * Материал. Не размытое стекло, а густой полированный хром:
+   * плотная заливка с направленным градиентом плюс блик по кромке.
+   */
+  /* Верхний блик — отдельным слоем поверх материала. */
+  --chrome-sheen: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.08) 38%,
+    transparent 68%
+  );
+  /* Сам металл: чередование светлых и тёмных полос даёт полировку. */
+  --chrome: linear-gradient(
+    160deg,
+    #eceef1 0%,
+    #b9bdc4 24%,
+    #f6f7f9 48%,
+    #9aa0a8 74%,
+    #d4d8dd 100%
+  );
+  --chrome-dense: linear-gradient(
+    146deg,
+    rgba(255, 255, 255, 0.42) 0%,
+    rgba(255, 255, 255, 0.1) 20%,
+    rgba(255, 255, 255, 0.3) 42%,
+    rgba(255, 255, 255, 0.06) 58%,
+    rgba(255, 255, 255, 0.22) 80%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+
+  /* Радужный перелив. Используется дозированно — не более двух мест на экран. */
+  --iridescent: conic-gradient(
+    from 200deg,
+    #5aa9ff,
+    #a78bfa,
+    #4ade80,
+    #fde68a,
+    #fb9fc4,
+    #5aa9ff
+  );
+
+  /*
+   * Хроматическая аберрация по кромке: разные оттенки на противоположных
+   * гранях. Именно она даёт ощущение толстого преломляющего материала.
+   */
+  --edge: inset 0 1px 0 rgba(255, 255, 255, 0.34), inset 1px 0 0 rgba(130, 190, 255, 0.14),
+    inset -1px 0 0 rgba(255, 160, 220, 0.11), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-0);
+  color: var(--text);
+  font: 15px/1.55 var(--font-text);
+  font-variant-numeric: tabular-nums;
+  overscroll-behavior: none;
+}
+
+/* --- Фон: градиент, волны, зерно ---------------------------------------- */
+
+.bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(130% 90% at 50% -10%, var(--bg-2), var(--bg-0) 62%);
+}
+
+.bg__waves {
+  position: absolute;
+  inset: -25%;
+  filter: blur(76px);
+  opacity: 0.42;
+}
+
+.bg__wave {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+/* Холодное свечение сверху — источник, из которого идёт луч. */
+.bg__wave--1 {
+  width: 82vw;
+  height: 82vw;
+  top: -22%;
+  left: -26%;
+  background: radial-gradient(circle, rgba(190, 215, 255, 0.14) 0%, transparent 62%);
+  animation: drift-1 34s var(--ease) infinite alternate;
+}
+
+.bg__wave--2 {
+  width: 88vw;
+  height: 88vw;
+  bottom: -30%;
+  right: -34%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.07) 0%, transparent 66%);
+  animation: drift-2 40s var(--ease) infinite alternate;
+}
+
+.bg__wave--3 {
+  display: none;
+}
+
+/*
+ * Спектральный луч — то самое, из-за чего тёмный фон на референсах живой.
+ * Свет проходит через материал и раскладывается в радугу.
+ */
+.bg__prism {
+  position: absolute;
+  top: 26%;
+  left: -25%;
+  width: 150%;
+  height: 200px;
+  transform: rotate(-19deg);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 20%,
+    rgba(255, 130, 190, 0.42) 33%,
+    rgba(255, 205, 130, 0.38) 43%,
+    rgba(150, 255, 200, 0.38) 54%,
+    rgba(130, 195, 255, 0.44) 66%,
+    rgba(195, 145, 255, 0.34) 78%,
+    transparent 95%
+  );
+  filter: blur(42px);
+  opacity: 0.34;
+  animation: prism-sweep 26s var(--ease) infinite alternate;
+  will-change: transform;
+}
+
+/* Яркое ядро луча: узкая почти белая линия внутри спектра. */
+.bg__prism::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 12%;
+  width: 68%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.85) 35%,
+    rgba(255, 255, 255, 0.6) 60%,
+    transparent
+  );
+  filter: blur(3px);
+}
+
+@keyframes prism-sweep {
+  from {
+    transform: rotate(-19deg) translate3d(-4%, -3vh, 0);
+  }
+  to {
+    transform: rotate(-15deg) translate3d(4%, 5vh, 0);
+  }
+}
+
+@keyframes drift-1 {
+  to {
+    transform: translate3d(18vw, 12vh, 0) scale(1.15);
+  }
+}
+@keyframes drift-2 {
+  to {
+    transform: translate3d(-14vw, -16vh, 0) scale(1.1);
+  }
+}
+@keyframes drift-3 {
+  to {
+    transform: translate3d(-10vw, 8vh, 0) scale(0.9);
+  }
+}
+
+/* Одно зерно на весь экран. Статичное и лёгкое. */
+.bg__noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* --- Каркас экрана ------------------------------------------------------ */
+
+#app {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+}
+
+/* Содержательные блоки не сжимаются — распорки для этого и заведены. */
+.screen > *:not(.screen__spacer) {
+  flex-shrink: 0;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--safe-top) + 28px) var(--pad) calc(var(--safe-bottom) + 28px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: screen-in 0.42s var(--ease) both;
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+}
+
+/*
+ * Вертикальная стопка. Отступ задаётся один раз на контейнере, а не
+ * приписывается каждому элементу по месту.
+ */
+.stack > * + * {
+  margin-top: var(--stack, var(--sp-3));
+}
+
+.stack--sm {
+  --stack: var(--sp-2);
+}
+
+.stack--lg {
+  --stack: var(--sp-4);
+}
+
+.stack--air {
+  --stack: var(--air-md);
+}
+
+/* Распорка: раздвигает контент по вертикали, чтобы экран дышал. */
+.screen__spacer {
+  flex: 1;
+  min-height: 0;
+}
+
+/*
+ * Распорка — не блок содержимого, а пустое место. Отступ ритма ей ни к чему:
+ * кнопки ниже отбиты собственным margin, и без этого правила между текстом
+ * и кнопками копилось 66px на пустоте.
+ */
+.stack > .screen__spacer {
+  margin-top: 0;
+}
+
+/* Пустой блок сообщения не занимает строку, пока сообщения нет. */
+.status:empty {
+  display: none;
+}
+
+.screen--roomy {
+  padding-bottom: calc(var(--safe-bottom) + var(--air-lg));
+}
+
+.screen__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+/* --- Типографика -------------------------------------------------------- */
+
+h1 {
+  margin: 0 0 var(--sp-2);
+  font-family: var(--font-display);
+  font-size: 33px;
+  line-height: var(--lh-tight);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+h2 {
+  margin: 0 0 var(--sp-2);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+p {
+  margin: 0 0 var(--sp-2);
+  color: var(--text-dim);
+}
+
+.lead {
+  font-size: 15px;
+  line-height: var(--lh-text);
+  font-weight: 450;
+  color: var(--text-dim);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+.faint {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+.center {
+  text-align: center;
+}
+
+/*
+ * Хромовая типографика: полированный металл вместо заливки.
+ * Градиент с частой сменой светлого и тёмного имитирует отражения,
+ * а его сдвиг заставляет блики течь по буквам.
+ */
+.chrome,
+.crash__fall,
+.crash__base,
+.splash__title {
+  font-family: var(--font-chrome);
+  font-size: 46px;
+  line-height: 1.04;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  text-align: center;
+  text-transform: uppercase;
+  background: linear-gradient(
+    172deg,
+    #ffffff 0%,
+    #cdd3dc 9%,
+    #5c6470 21%,
+    #ffffff 32%,
+    #8d95a2 44%,
+    #eef1f5 55%,
+    #454c58 68%,
+    #f7f9fb 80%,
+    #7e8794 92%,
+    #dfe4ea 100%
+  );
+  background-size: 100% 260%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 26px rgba(190, 215, 255, 0.32))
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.5));
+  animation: chrome-flow 7s var(--ease) infinite alternate;
+}
+
+/* На рабочих экранах металл спокойнее и мельче. */
+.chrome {
+  font-size: 34px;
+}
+
+@keyframes chrome-flow {
+  from {
+    background-position: 50% 0%;
+  }
+  to {
+    background-position: 50% 100%;
+  }
+}
+
+/* Между блоками — воздух, а не стык. */
+.screen > .glass + .glass {
+  margin-top: var(--gap);
+}
+
+/* Карточка из полированного металла. Используется на рабочих экранах. */
+.glass {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--r-card);
+  background: var(--chrome-sheen), var(--chrome);
+  color: var(--ink);
+  box-shadow:
+    0 10px 36px rgba(0, 0, 0, 0.42),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.12);
+  transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Внутри карточки палитра инвертируется: на светлом металле нужен тёмный текст. */
+.glass h2 {
+  color: var(--ink);
+}
+.glass p,
+.glass .list li,
+.glass .dim {
+  color: var(--ink-dim);
+}
+.glass .faint {
+  color: var(--ink-faint);
+}
+.glass .row {
+  border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.glass .field__label {
+  color: var(--ink-dim);
+}
+
+.glass .input,
+.glass textarea.input {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(16, 24, 38, 0.16);
+  color: var(--ink);
+}
+
+.glass .input::placeholder {
+  color: rgba(16, 24, 38, 0.32);
+}
+
+.glass .input:focus {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(30, 108, 235, 0.55);
+  box-shadow: 0 0 0 3px rgba(46, 125, 255, 0.18);
+}
+
+.glass .input--error {
+  border-color: rgba(198, 40, 40, 0.65);
+}
+
+.glass .balance,
+.glass .balance__coin {
+  color: var(--ink);
+}
+
+.glass--tight {
+  padding: 15px 17px;
+  border-radius: 24px;
+}
+
+/*
+ * Specular highlight: длинная мягкая полоса света наискось.
+ * Именно она читается как полированная поверхность, а не как матовое стекло.
+ */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    104deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.5) 40%,
+    rgba(255, 255, 255, 0.12) 50%,
+    transparent 66%
+  );
+}
+
+/* Содержимое — над бликом, кромка — над всем. */
+.glass > * {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * Радужная кромка в один пиксель — то самое преломление на краю толстого
+ * стекла. Рисуем градиент и вырезаем середину маской, оставляя только обводку.
+ */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(
+    from 210deg,
+    transparent 0%,
+    rgba(255, 100, 255, 0.15) 20%,
+    rgba(100, 200, 255, 0.2) 40%,
+    rgba(255, 220, 100, 0.15) 60%,
+    transparent 80%
+  );
+  background-size: 200% 200%;
+  mix-blend-mode: soft-light;
+  opacity: 0.4;
+  transition: opacity 0.4s ease;
+}
+
+/*
+ * Акцентный материал: кромка ярче и медленно переливается.
+ * Спека: не больше одного-двух таких на экран и никогда под основным текстом.
+ */
+.glass--live::after {
+  opacity: 0.75;
+  animation: dispersion-drift 26s var(--ease) infinite alternate;
+}
+
+.glass:active::after {
+  opacity: 0.7;
+}
+
+@keyframes dispersion-drift {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+/* --- Кнопки ------------------------------------------------------------- */
+
+.btn {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--r-btn);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    transform 0.34s var(--spring),
+    box-shadow 0.3s var(--ease),
+    filter 0.22s var(--ease);
+}
+
+/* Тот же скользящий блик, что и на карточках. */
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    104deg,
+    transparent 24%,
+    rgba(255, 255, 255, 0.18) 42%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 62%
+  );
+}
+
+/*
+ * Реакция на касание. Материал проседает под пальцем, а из точки нажатия
+ * расходится пятно света — как будто стекло на мгновение прогнулось.
+ * Координаты приходят из main.js, поэтому волна идёт именно оттуда,
+ * куда нажали, а не из центра кнопки.
+ */
+.btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    circle at var(--rx, 50%) var(--ry, 50%),
+    rgba(255, 255, 255, 0.5),
+    rgba(255, 255, 255, 0.16) 26%,
+    transparent 52%
+  );
+  transition: opacity 0.42s var(--ease);
+}
+
+.btn--pressed::after {
+  opacity: 1;
+  transition-duration: 0.07s;
+}
+
+.btn:active {
+  transform: scale(0.962);
+  filter: brightness(1.14) saturate(1.06);
+}
+
+/* Главная кнопка тяжелее: под нажатием она прижимается к поверхности. */
+.btn--primary.btn--pressed {
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.44),
+    inset 0 3px 9px rgba(0, 0, 0, 0.16),
+    inset 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+/* Стеклянная кнопка не проседает, а уплотняется. */
+.btn--link.btn--pressed,
+.btn--glass.btn--pressed {
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.btn:disabled {
+  opacity: 0.38;
+  filter: saturate(0.5);
+  pointer-events: none;
+}
+
+/*
+ * Главное действие: самый плотный материал — полированное серебро.
+ * Текст на нём тёмный: на светлом хроме это единственный способ
+ * удержать контраст, а читаемость важнее эффекта.
+ */
+.btn--primary {
+  border-radius: 999px;
+  background: var(--chrome-sheen), var(--chrome);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.38),
+    0 2px 8px rgba(0, 0, 0, 0.22),
+    inset 0 1px 1px rgba(255, 255, 255, 0.6),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.12);
+}
+
+.btn--primary:active {
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.42),
+    inset 0 2px 5px rgba(0, 0, 0, 0.14),
+    inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* Блик ложился прямо на надпись и рвал её — на главной кнопке его нет. */
+.btn--primary::before {
+  content: none;
+}
+
+/* Второстепенное действие: тот же материал, но разреженный и спокойный. */
+/*
+ * Материал у этой кнопки светлый, поэтому и надпись на ней тёмная —
+ * белым по хрому текст пропадал.
+ */
+.btn--glass {
+  background: var(--chrome), rgba(22, 27, 34, 0.55);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow:
+    var(--edge),
+    0 10px 26px rgba(0, 0, 0, 0.34);
+}
+
+.btn--danger {
+  background: linear-gradient(140deg, rgba(255, 120, 120, 0.2), rgba(255, 90, 90, 0.1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 190, 190, 0.28),
+    inset 0 0 0 1px rgba(255, 90, 90, 0.26),
+    0 10px 24px rgba(0, 0, 0, 0.3);
+  color: #ffb3b3;
+}
+
+/*
+ * Второстепенное действие. Без материала кнопка растворялась в фоне,
+ * поэтому даём ей тонкое стекло: кромка читается, но спорить с хромом
+ * главной кнопки она не начинает.
+ */
+.btn--link {
+  min-height: 48px;
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: 15px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.028));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 6px 18px rgba(0, 0, 0, 0.26);
+}
+
+.btn--link:active {
+  color: var(--text);
+}
+
+.btn--small {
+  min-height: 40px;
+  font-size: 14px;
+  border-radius: 12px;
+  width: auto;
+  padding: 0 16px;
+}
+
+
+/* --- Поля --------------------------------------------------------------- */
+
+.field {
+  display: block;
+  margin-bottom: var(--sp-3);
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.input,
+textarea.input {
+  width: 100%;
+  padding: 15px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-field);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  /* Мигающая полоска места набора — как в текстовом редакторе. */
+  caret-color: #7fb3ff;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+textarea.input {
+  min-height: 92px;
+  resize: none;
+  line-height: 1.6;
+}
+
+.input:focus {
+  caret-color: #a8ccff;
+  border-color: rgba(46, 125, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(46, 125, 255, 0.16);
+}
+
+.input--error {
+  border-color: rgba(255, 90, 90, 0.6);
+}
+
+/*
+ * Поле PIN.
+ *
+ * Набор идёт от левого края, как в любом текстовом поле: при центровке
+ * каретка до первого символа стоит посреди пустого поля и читается не как
+ * место набора, а как случайная чёрточка. Разрядка оставлена — она делает
+ * точки счётными, чтобы было видно, сколько символов уже введено.
+ */
+.input--pin {
+  text-align: left;
+  letter-spacing: 0.42em;
+  font-size: 22px;
+  caret-color: #7fb3ff;
+}
+
+/* Пока поле пустое, мигающая полоска показывает, что можно набирать. */
+.input--pin:focus {
+  caret-color: #a8ccff;
+}
+
+.field__error {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+/* --- Мелочи ------------------------------------------------------------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.pill--ok {
+  color: var(--success);
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(52, 211, 153, 0.1);
+}
+.pill--warn {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.glass .pill {
+  background: rgba(16, 24, 38, 0.06);
+  border-color: rgba(16, 24, 38, 0.16);
+  color: var(--ink-dim);
+}
+
+.glass .pill--ok {
+  color: #0b6b45;
+  border-color: rgba(11, 107, 69, 0.32);
+  background: rgba(52, 211, 153, 0.18);
+}
+
+.glass .pill--warn {
+  color: #7a4b06;
+  border-color: rgba(122, 75, 6, 0.3);
+  background: rgba(251, 191, 36, 0.24);
+}
+
+.note {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  color: #f3d99b;
+  font-size: 14px;
+}
+
+.note--danger {
+  background: rgba(255, 90, 90, 0.08);
+  border-color: rgba(255, 90, 90, 0.24);
+  color: #ffc2c2;
+}
+
+.list {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.list li {
+  position: relative;
+  padding: 0 0 12px 22px;
+  color: var(--text-dim);
+}
+
+.list li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+
+.glass .list li::before {
+  background: linear-gradient(135deg, #3a4048, #6c737d);
+}
+
+.balance {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 660;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.balance__coin {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-left: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 0;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.checkbox input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* --- Сетка слов --------------------------------------------------------- */
+
+.words {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 10px;
+}
+
+.word {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 14px;
+}
+
+.word__n {
+  min-width: 18px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+/*
+ * Фраза лежит на светлом хроме, поэтому пилюли здесь свои: молочное
+ * стекло с чернильным текстом. С тёмными словами на этом фоне половину
+ * набора было просто не прочитать, а переписывать надо все 24.
+ */
+.glass .word {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(255, 255, 255, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 1px 2px rgba(10, 16, 26, 0.12);
+  color: var(--ink);
+  font-weight: 560;
+}
+
+.glass .word__n {
+  color: rgba(16, 24, 38, 0.45);
+  font-weight: 500;
+}
+
+/* --- Splash ------------------------------------------------------------- */
+
+.splash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+}
+
+/* Строка адреса на главном: без разделителя и верхнего поля. */
+.row--plain {
+  border: 0;
+  padding-top: 0;
+}
+
+.row__value {
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+/* Статус кошелька под суммой. */
+.row--status {
+  margin-top: var(--sp-2);
+}
+
+/* Экран блокировки: камень над полем ввода. */
+.lock__gem {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--air-md);
+}
+
+/*
+ * Щупальца лежат под камнем: начало пути закрыто им, и кажется, что они
+ * выходят из-за спины.
+ */
+.arms {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.arms path {
+  fill: none;
+  stroke: rgba(206, 230, 255, 0.72);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgba(170, 205, 255, 0.7));
+}
+
+.arms circle {
+  fill: rgba(226, 240, 255, 0.9);
+  filter: drop-shadow(0 0 6px rgba(180, 214, 255, 0.9));
+}
+
+/* --- Экраны знакомства --------------------------------------------------- */
+
+.hero {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+/*
+ * Шапка первого экрана. Интервалы нарастают сверху вниз: камень стоит
+ * с воздухом от потолка, заголовок держится рядом с ним, а описание уже
+ * отделено — так группа читается как логотип, а не как список из трёх строк.
+ */
+.screen.intro {
+  padding-top: calc(var(--safe-top) + var(--air-lg) + var(--sp-2));
+  padding-bottom: calc(var(--safe-bottom) + var(--air-lg) + var(--sp-4));
+}
+
+.intro__gem {
+  margin-bottom: calc(var(--air-md) + var(--sp-3));
+}
+
+.screen--center.intro .lead {
+  margin-top: calc(var(--air-lg) - var(--sp-1));
+  /* Чуть шире общей колонки: иначе фраза ломается на три строки и
+     съедает воздух, ради которого весь ритм и выстраивался. */
+  max-width: 42ch;
+}
+
+.intro .section {
+  margin-top: calc(var(--air-lg) - var(--sp-2));
+}
+
+.intro .screen__actions {
+  margin-top: var(--air-md);
+}
+
+/*
+ * Заголовок в том же материале, что и название на первом экране: тональный
+ * спад по буквам и мягкая аура позади. Разница одна — здесь он неподвижен,
+ * потому что читается сразу, а не собирается на глазах.
+ */
+.glow {
+  position: relative;
+  margin: var(--air-sm) 0 var(--sp-1);
+  font-family: var(--font-chrome);
+  font-size: 22px;
+  font-weight: 900;
+  line-height: var(--lh-tight);
+  /*
+   * Кириллица в Unbounded круглее и плотнее латиницы: при том же
+   * отрицательном трекинге буквы в «кошельке» слипаются, и надпись
+   * перестаёт быть похожей на название с первого экрана.
+   */
+  letter-spacing: 0;
+  background: linear-gradient(180deg, #ffffff 0%, #dee8f5 44%, #a5b7d0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter: none;
+  animation: none;
+}
+
+/* Центрированные экраны ставят его по середине, рабочие — по левому краю. */
+.screen--center .glow {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+.glow::after {
+  content: attr(data-t);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: -1;
+  text-align: inherit;
+  color: rgba(146, 188, 250, 0.46);
+  -webkit-text-fill-color: rgba(146, 188, 250, 0.46);
+  filter: blur(15px);
+  pointer-events: none;
+}
+
+/*
+ * «О кошельке». Заголовок стоит примерно там же, где название на первом
+ * экране, — переход между страницами получается без скачка. Место под
+ * этот отступ забрано у нижней части: список и стикер идут плотнее.
+ */
+.screen--center.about .glow {
+  margin-top: clamp(20px, 4vh, 42px);
+}
+
+.screen--fit.about {
+  padding-bottom: calc(var(--safe-bottom) + var(--sp-4));
+}
+
+/*
+ * Подзаголовок и список подняты: место отдано зазору перед стикером.
+ * Пункты стояли к утке почти вплотную и читались как одна куча.
+ */
+.screen--center.about .lead {
+  margin-top: var(--air-lg);
+}
+
+.about .section {
+  margin-top: var(--sp-2);
+}
+
+/* Пункты длинные, поэтому им нужен и воздух между строками, и между собой. */
+.screen--fit.about .feature {
+  padding: clamp(7px, 1.25vh, 13px) 0;
+}
+
+.about .feature__text {
+  line-height: 1.68;
+}
+
+/*
+ * Выделение внутри пункта — тем же светом, что и заголовок: буквы
+ * плотнее и светлее остального текста, вокруг мягкое свечение. Цветом
+ * ничего не красим: на графите цвет читается как ссылка, а это акцент.
+ */
+.mark {
+  font-weight: 700;
+  color: #eef4fc;
+  text-shadow:
+    0 0 18px rgba(148, 192, 255, 0.3),
+    0 0 6px rgba(210, 232, 255, 0.21);
+}
+
+.about .sticker {
+  width: 112px;
+  /* Зазор перед уткой: без него пункты и стикер читались одной кучей. */
+  margin: var(--air-md) auto var(--sp-1);
+}
+
+.screen--fit.about .screen__actions {
+  margin-top: var(--sp-2);
+}
+
+/* Приветствие: камень крупный, под ним имя и действия. */
+.welcome {
+  animation: screen-jolt 3.8s linear both;
+}
+
+@keyframes screen-jolt {
+  0%,
+  76% {
+    transform: translate3d(0, 0, 0);
+  }
+  78% {
+    transform: translate3d(0, 3px, 0);
+  }
+  80% {
+    transform: translate3d(-2px, -2px, 0);
+  }
+  82% {
+    transform: translate3d(2px, 2px, 0);
+  }
+  84% {
+    transform: translate3d(-1px, -1px, 0);
+  }
+  86%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.welcome__gem {
+  position: relative;
+  z-index: 2;
+  margin-bottom: var(--air-lg);
+}
+
+.welcome .screen__actions {
+  gap: var(--sp-3);
+}
+
+/* --- Камень ------------------------------------------------------------- */
+
+.gem {
+  position: relative;
+  display: block;
+  filter: drop-shadow(0 22px 60px rgba(150, 190, 255, 0.3));
+  animation: gem-breathe 6s var(--ease) infinite alternate;
+}
+
+.gem svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.gem__facet--table {
+  fill: url(#gTable);
+}
+.gem__facet--bright {
+  fill: url(#gBright);
+}
+.gem__facet--mid {
+  fill: url(#gMid);
+}
+.gem__facet--dark {
+  fill: url(#gMid);
+  opacity: 0.55;
+}
+.gem__facet--deep {
+  fill: url(#gDeep);
+}
+
+/* Рёбра выжжены светом — это главный источник «дорогого» вида. */
+/*
+ * Лучи, как на иконке: белое ядро уходит в спектр и гаснет. Режим screen
+ * заставляет их светиться поверх графита, а не закрашивать его.
+ */
+.gem__rays {
+  mix-blend-mode: screen;
+  transform-origin: 50px 50px;
+  animation: gem-rays 7s var(--ease) infinite alternate;
+}
+
+.gem__ray {
+  fill: url(#gRay);
+  opacity: calc(0.34 + 0.07 * var(--i));
+  animation: gem-ray-pulse 4.5s var(--ease) infinite alternate;
+  animation-delay: calc(var(--i) * -0.55s);
+}
+
+@keyframes gem-rays {
+  from {
+    transform: rotate(-2.5deg) scale(0.94);
+  }
+  to {
+    transform: rotate(2.5deg) scale(1.04);
+  }
+}
+
+@keyframes gem-ray-pulse {
+  from {
+    opacity: 0.18;
+  }
+  to {
+    opacity: 0.75;
+  }
+}
+
+/* Цветное преломление внутри граней — оно и отличает камень от стекляшки. */
+.gem__prism {
+  mix-blend-mode: screen;
+  animation: gem-prism 6.5s var(--ease) infinite alternate;
+  animation-delay: calc(var(--i) * -1.6s);
+}
+
+@keyframes gem-prism {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.gem__edges path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 0.85;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+@keyframes halo-turn {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@keyframes gem-breathe {
+  to {
+    transform: scale(1.04) rotate(0.6deg);
+  }
+}
+
+/*
+ * Экран приветствия: камень раскручивается всё сильнее, трясётся вместе
+ * со светом — и от удара верхняя строка заголовка обрушивается на нижнюю.
+ *
+ * Вращаем внутренний svg, трясём .gem: два transform на одном узле
+ * не уживаются, а так слои независимы. Наклон по X даёт объём — видно
+ * площадку камня сверху, а не плоский силуэт.
+ */
+.spin .gem {
+  perspective: 1100px;
+  animation: gem-quake 3.8s linear both;
+}
+
+.spin .gem svg {
+  animation: gem-spin 3.8s linear both;
+}
+
+@keyframes gem-spin {
+  0% {
+    transform: perspective(900px) rotateX(15deg) rotateY(0deg);
+    animation-timing-function: cubic-bezier(0.82, 0, 0.96, 0.62);
+  }
+  76% {
+    transform: perspective(900px) rotateX(15deg) rotateY(3960deg);
+    animation-timing-function: cubic-bezier(0.08, 0.7, 0.18, 1);
+  }
+  100% {
+    transform: perspective(900px) rotateX(13deg) rotateY(5040deg);
+  }
+}
+
+/* Тряска и вспышки света: слабые вначале, злые на пике оборотов. */
+@keyframes gem-quake {
+  0%,
+  30% {
+    transform: translate3d(0, 0, 0);
+    filter: drop-shadow(0 22px 60px rgba(150, 190, 255, 0.3));
+  }
+  38% {
+    transform: translate3d(-1px, 1px, 0);
+    filter: drop-shadow(0 22px 66px rgba(180, 215, 255, 0.42));
+  }
+  46% {
+    transform: translate3d(2px, -1px, 0);
+    filter: drop-shadow(0 22px 58px rgba(150, 190, 255, 0.32));
+  }
+  54% {
+    transform: translate3d(-3px, 2px, 0) rotate(-0.6deg);
+    filter: drop-shadow(0 20px 78px rgba(214, 236, 255, 0.62));
+  }
+  60% {
+    transform: translate3d(4px, -2px, 0) rotate(0.5deg);
+    filter: drop-shadow(0 22px 60px rgba(150, 190, 255, 0.34));
+  }
+  66% {
+    transform: translate3d(-5px, 3px, 0) rotate(-0.8deg);
+    filter: drop-shadow(0 18px 96px rgba(255, 255, 255, 0.78));
+  }
+  71% {
+    transform: translate3d(5px, -3px, 0) rotate(0.7deg);
+    filter: drop-shadow(0 22px 62px rgba(160, 200, 255, 0.36));
+  }
+  76% {
+    transform: translate3d(-6px, 4px, 0) rotate(-1deg);
+    filter: drop-shadow(0 16px 110px rgba(255, 255, 255, 0.9));
+  }
+  82% {
+    transform: translate3d(3px, -2px, 0) rotate(0.4deg);
+    filter: drop-shadow(0 22px 64px rgba(170, 205, 255, 0.4));
+  }
+  90% {
+    transform: translate3d(-1px, 1px, 0);
+    filter: drop-shadow(0 22px 60px rgba(150, 190, 255, 0.32));
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    filter: drop-shadow(0 22px 60px rgba(150, 190, 255, 0.3));
+  }
+}
+
+/*
+ * Заголовок: «Gram» стоит, пока не тряхнёт, потом падает на «Wallet».
+ * Заливку и свечение несут сами строки — родителю они не нужны, иначе
+ * тень удвоится.
+ */
+.crash {
+  position: relative;
+  background: none;
+  filter: none;
+  animation: none;
+}
+
+.crash__fall,
+.crash__base {
+  position: relative;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+/*
+ * Падает не всё слово целиком: правый край цепляется за нижнюю строку
+ * и держит, поэтому вращаем вокруг правого нижнего угла — левая половина
+ * обрушивается, а «M» так и остаётся лежать на «e».
+ */
+.crash__fall {
+  z-index: 2;
+  display: inline-block;
+  transform-origin: 100% 100%;
+  animation:
+    chrome-flow 7s var(--ease) infinite alternate,
+    title-crash 3.8s linear both;
+}
+
+/* Слово лежит на кромке нижней строки — с этого положения его и поднимают. */
+.crash__fall--down {
+  animation: chrome-flow 7s var(--ease) infinite alternate;
+  transform: rotate(calc(var(--fall, 24deg) * -1));
+  transition: transform 2.05s cubic-bezier(0.32, 0.06, 0.28, 1);
+}
+
+.crash__fall--down.lifted {
+  transform: none;
+}
+
+.crash__base {
+  z-index: 1;
+  animation: chrome-flow 7s var(--ease) infinite alternate;
+}
+
+@keyframes title-crash {
+  0%,
+  52% {
+    transform: none;
+  }
+  /* Тряска от раскрутки: слово теряет опору. */
+  57% {
+    transform: rotate(-1.6deg);
+  }
+  62% {
+    transform: rotate(1deg);
+  }
+  66% {
+    transform: rotate(-2.4deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 1);
+  }
+  /* Свободное падение с ускорением — до удара о кромку. */
+  78% {
+    transform: translate3d(0, 0.02em, 0) rotate(calc(var(--fall, 24deg) * -1.06));
+    animation-timing-function: cubic-bezier(0.2, 0, 0.4, 1);
+  }
+  /* Отскок: угол отыгрывает назад, но силы уже мало. */
+  85% {
+    transform: translate3d(0, -0.03em, 0) rotate(calc(var(--fall, 24deg) * -0.82));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.7, 1);
+  }
+  91% {
+    transform: translate3d(0, 0.012em, 0) rotate(calc(var(--fall, 24deg) * -1.03));
+  }
+  96% {
+    transform: translate3d(0, 0, 0) rotate(calc(var(--fall, 24deg) * -0.96));
+  }
+  100% {
+    transform: rotate(calc(var(--fall, 24deg) * -1));
+  }
+}
+
+
+/* Свет, который камень отбрасывает на пространство вокруг. */
+.gem__halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 320px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  /*
+   * Спектр живёт здесь, а не на рёбрах: отдельные цветные штрихи на гранях
+   * читаются как раскраска, а размытый ореол — как преломлённый свет.
+   */
+  background:
+    radial-gradient(circle, rgba(210, 228, 255, 0.18) 0%, transparent 58%),
+    conic-gradient(
+      from 210deg,
+      rgba(255, 140, 200, 0.16),
+      rgba(140, 200, 255, 0.18),
+      rgba(160, 255, 210, 0.13),
+      rgba(255, 220, 150, 0.15),
+      rgba(255, 140, 200, 0.16)
+    );
+  filter: blur(38px);
+  animation: halo-turn 42s linear infinite;
+  will-change: transform;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* --- Экран без прокрутки ------------------------------------------------ */
+
+/*
+ * Всё умещается в один экран: контент раздвигается по вертикали сам,
+ * а прокрутка отключена, чтобы кнопка всегда была видна.
+ */
+.screen--fit {
+  overflow-y: auto;
+  /* Кнопка не должна лежать на плинтусе: даём ей воздух снизу. */
+  padding-bottom: calc(var(--safe-bottom) + var(--air-lg));
+  /*
+   * safe center: пока контент помещается — он по центру, а как только
+   * перестаёт (узкое окно Telegram на компьютере) — прижимается к верху
+   * и прокручивается. Без safe его срезало бы с обеих сторон разом.
+   */
+  justify-content: safe center;
+  gap: 0;
+}
+
+.screen--fit .section {
+  padding: 0;
+  border-top: 0;
+}
+
+.screen--fit .feature {
+  padding: clamp(9px, 1.55vh, 16px) 0;
+}
+
+.screen--fit .screen__actions {
+  margin-top: var(--air-lg);
+}
+
+/* Заголовок, меняющий сам себя. */
+.swap {
+  position: relative;
+  background: none;
+  display: grid;
+  place-items: center;
+  min-height: 1.15em;
+}
+
+/*
+ * Кадры сменяются один раз и останавливаются на имени: бесконечная
+ * анимация на первом экране отвлекала бы от чтения.
+ */
+.swap__i {
+  grid-area: 1 / 1;
+  margin-bottom: 0;
+  visibility: hidden;
+  opacity: 0;
+  animation: swap-in 9.6s cubic-bezier(0.22, 0.9, 0.24, 1) forwards;
+  animation-delay: calc(var(--n) * 3.2s);
+}
+
+.swap__i:last-child {
+  animation-name: swap-last;
+}
+
+@keyframes swap-in {
+  0% {
+    visibility: visible;
+    opacity: 0;
+    transform: translateY(13px);
+    letter-spacing: 0.06em;
+    filter: blur(5px);
+  }
+  8%,
+  24% {
+    opacity: 1;
+    transform: translateY(0);
+    letter-spacing: -0.035em;
+    filter: blur(0);
+  }
+  31% {
+    visibility: visible;
+    opacity: 0;
+    transform: translateY(-11px);
+    letter-spacing: -0.055em;
+    filter: blur(5px);
+  }
+  31.01%,
+  100% {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-11px);
+    filter: blur(5px);
+  }
+}
+
+/* Последний кадр остаётся на экране навсегда. */
+@keyframes swap-last {
+  0% {
+    visibility: visible;
+    opacity: 0;
+    transform: translateY(14px);
+    letter-spacing: 0.06em;
+    filter: blur(5px);
+  }
+  8%,
+  100% {
+    /* Держим явно: без этого к концу анимации вернётся базовое hidden
+       и название пропадёт с экрана. */
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0);
+    letter-spacing: -0.035em;
+    filter: blur(0);
+  }
+}
+
+/* --- Центрированный экран знакомства ------------------------------------ */
+
+.screen--center {
+  text-align: center;
+}
+
+/* Заголовок ставится в две строки вручную — ритм важнее автопереноса. */
+.screen--center h1,
+.swap__i {
+  margin-bottom: 14px;
+  font-family: var(--font-chrome);
+  font-weight: 900;
+  font-size: 30px;
+  letter-spacing: -0.035em;
+  background: linear-gradient(
+    172deg,
+    #ffffff 0%,
+    #cdd3dc 12%,
+    #626a76 26%,
+    #ffffff 40%,
+    #949cab 55%,
+    #eef1f5 70%,
+    #4d545f 84%,
+    #f7f9fb 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 18px rgba(190, 215, 255, 0.28));
+}
+
+/*
+ * Хромовая заливка выше предназначена меняющемуся названию на первом
+ * экране. Статичным заголовкам она не идёт: полосы светлого и тёмного
+ * на неподвижной фразе читаются как дефект печати. Возвращаем им
+ * спокойный тональный спад .glow — правило стоит здесь, потому что
+ * «.screen--center h1» той же силы и объявлен выше по файлу.
+ */
+.screen--center .glow {
+  background: linear-gradient(180deg, #ffffff 0%, #dee8f5 44%, #a5b7d0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter: none;
+}
+
+/*
+ * Меняющийся заголовок.
+ *
+ * Хром здесь не работает — его чередование светлого и тёмного на короткой
+ * фразе читается как дешёвый эффект. Берём другое: спокойный тональный
+ * спад сверху вниз (свет падает на буквы, а не бегает по ним) и мягкую
+ * голубую ауру позади текста. Резкого белого нет нигде: самая светлая
+ * точка — #f2f7fd на верхней кромке букв.
+ */
+.swap__i {
+  position: relative;
+  background: linear-gradient(180deg, #f2f7fd 0%, #d4dfee 46%, #93a6c0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+
+/*
+ * Аура: та же надпись, размытая и уведённая за текст. Даёт свет вокруг
+ * букв, но, в отличие от text-shadow, не подсвечивает их края —
+ * поэтому не режет глаз.
+ */
+.swap__i::after {
+  content: attr(data-t);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: -1;
+  text-align: center;
+  color: rgba(128, 174, 244, 0.38);
+  -webkit-text-fill-color: rgba(128, 174, 244, 0.38);
+  filter: blur(12px);
+  pointer-events: none;
+}
+
+/* Имя в финале — плотнее и чуть теплее по свету, чтобы читалось как итог. */
+.swap__i:last-child {
+  background: linear-gradient(180deg, #ffffff 0%, #dee8f5 44%, #a5b7d0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.swap__i:last-child::after {
+  color: rgba(146, 188, 250, 0.46);
+  -webkit-text-fill-color: rgba(146, 188, 250, 0.46);
+  filter: blur(15px);
+}
+
+.screen--center .section {
+  text-align: center;
+}
+
+.screen--center .lead {
+  max-width: 34ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Длинный заголовок: тот же металл, но мельче — иначе он кричит. */
+.screen--center .chrome--sm {
+  max-width: 15ch;
+  margin: var(--air-sm) auto var(--sp-1);
+  font-size: 25px;
+  line-height: 1.24;
+  letter-spacing: 0.005em;
+}
+
+/*
+ * Экран предупреждений: текст идёт во всю ширину. Узкая колонка здесь
+ * даёт лишние строки, а всё содержимое обязано уместиться без прокрутки.
+ */
+.screen--wide .lead,
+.screen--wide .feature__text {
+  max-width: none;
+}
+
+/*
+ * Стикер над кнопкой. Свечение — отдельным слоем под картинкой, а не
+ * фильтром на ней: filter пересчитывался бы на каждом кадре гифки,
+ * и на телефоне это заметно подтормаживает.
+ */
+.sticker {
+  position: relative;
+  width: 160px;
+  margin: var(--air-md) auto var(--air-sm);
+  pointer-events: none;
+}
+
+.sticker__glow {
+  position: absolute;
+  left: 50%;
+  top: 54%;
+  width: 260px;
+  height: 260px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 202, 108, 0.4) 0%,
+    rgba(255, 150, 60, 0.22) 36%,
+    rgba(255, 140, 50, 0.08) 56%,
+    transparent 72%
+  );
+  filter: blur(12px);
+  will-change: opacity, transform;
+  animation: sticker-glow 3.6s var(--ease) infinite alternate;
+}
+
+.sticker__img {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@keyframes sticker-glow {
+  from {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(0.93);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.07);
+  }
+}
+
+/* Ссылка в тексте: подчёркивание тоньше буквы, без кричащего цвета. */
+.link {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(190, 215, 255, 0.5);
+  padding-bottom: 1px;
+  transition: border-color 0.2s var(--ease);
+}
+
+.link:active {
+  color: #fff;
+  border-bottom-color: rgba(190, 215, 255, 0.95);
+}
+
+.feature {
+  padding: 18px 0;
+}
+
+.feature + .feature {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Метка «скоро»: заметная, но не спорящая с самим пунктом. */
+.badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 3px 8px 2px;
+  border-radius: 999px;
+  border: 1px solid rgba(190, 215, 255, 0.28);
+  background: rgba(190, 215, 255, 0.1);
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  vertical-align: middle;
+  color: #cfe0f8;
+}
+
+.feature__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: var(--sp-1);
+}
+
+.feature__text {
+  margin: 0 auto;
+  max-width: 36ch;
+  font-size: 14px;
+  line-height: var(--lh-text);
+  color: var(--text-dim);
+}
+
+/* --- Текстовые секции без плашек ---------------------------------------- */
+
+.section {
+  padding: 24px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.section:first-of-type {
+  border-top: 0;
+}
+
+.section h2 {
+  margin-bottom: 8px;
+}
+
+.section p {
+  margin-bottom: 0;
+}
+
+.section .list {
+  margin-bottom: 0;
+}
+
+/* Экран сборки: заголовок, лог и фраза идут одной лентой. */
+.forge {
+  padding-top: calc(var(--safe-top) + var(--air-lg) + var(--sp-4));
+}
+
+.screen--center .forge__title,
+.forge .glow {
+  margin-bottom: var(--sp-2);
+}
+
+/* Предупреждение стояло вплотную к карточке с фразой. */
+.reveal .note {
+  margin-bottom: var(--sp-4);
+}
+
+.forge .term {
+  margin-top: var(--air-sm);
+}
+
+/* --- Терминал сборки ----------------------------------------------------- */
+
+/*
+ * Лог создания кошелька. Значения в нём настоящие, поэтому и выглядеть
+ * он должен как терминал, а не как декорация: моноширинный шрифт,
+ * тёмное стекло, живой курсор.
+ */
+.term {
+  margin-top: var(--sp-4);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 11, 16, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 18px 44px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.term__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.term__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.term__meta {
+  margin-left: auto;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.term__name {
+  margin-left: 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.term__body {
+  height: clamp(300px, 50vh, 430px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px 16px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.72;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-dim);
+}
+
+/* Пустая строка в выводе — такой же отступ, как в настоящей консоли. */
+.term__row:empty::before {
+  content: " ";
+}
+
+.term__row {
+  animation: term-in 0.18s var(--ease) both;
+}
+
+@keyframes term-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 3px, 0);
+  }
+}
+
+.term__row--cmd {
+  color: #eaf1ff;
+}
+
+.term__row--ok {
+  color: #9fd8b4;
+}
+
+.term__row--val {
+  color: #a8c8f0;
+}
+
+.term__row--wait,
+.term__row--dim {
+  color: var(--text-faint);
+}
+
+.term__row--done {
+  margin-top: 6px;
+  color: #d8ecff;
+  text-shadow: 0 0 18px rgba(160, 205, 255, 0.5);
+}
+
+/* Курсор: единственное, что мигает, пока идёт работа. */
+.term__caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  vertical-align: -2px;
+  background: rgba(214, 236, 255, 0.85);
+  animation: term-caret 1s steps(2, start) infinite;
+}
+
+@keyframes term-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/*
+ * Фраза, которая выезжает под терминалом. Лог никуда не девается —
+ * к нему можно вернуться прокруткой вверх, поэтому это блок на той же
+ * странице, а не отдельный экран.
+ */
+.reveal {
+  margin-top: 34px;
+  padding-top: 26px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  animation: reveal-in 0.8s var(--ease) both;
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* --- Модалка и тост ----------------------------------------------------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fade-in 0.22s var(--ease) both;
+}
+
+.modal__sheet {
+  width: 100%;
+  /*
+   * Резервная копия — это 24 слова в двенадцать строк плюс заголовок
+   * и кнопки: в высоту телефона такой лист не влезает. Без ограничения
+   * он вылезал за экран, и нижние слова оказывались под кнопками.
+   */
+  max-height: 88vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px var(--pad) calc(var(--safe-bottom) + 22px);
+  border-radius: 28px 28px 0 0;
+  background: var(--bg-1);
+  border-top: 1px solid var(--glass-border);
+  animation: sheet-up 0.32s var(--ease) both;
+}
+
+/* В листе слова идут плотнее: место дороже, читаемость та же. */
+.modal__sheet .words {
+  gap: 6px 8px;
+}
+
+.modal__sheet .word {
+  padding: 8px 10px;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 24px);
+  z-index: 50;
+  transform: translateX(-50%);
+  max-width: calc(100% - 40px);
+  padding: 13px 20px;
+  border-radius: 999px;
+  background: rgba(20, 23, 28, 0.94);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  font-size: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: toast-in 0.28s var(--ease) both;
+}
+
+.toast--error {
+  border-color: rgba(255, 90, 90, 0.4);
+  color: #ffc2c2;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+}
+
+/* --- Спиннер ------------------------------------------------------------ */
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- Доступность -------------------------------------------------------- */
+
+/*
+ * Невысокое окно: на компьютере Telegram открывает приложение в узкой
+ * колонке, и всё, что рассчитано на телефон, перестаёт помещаться.
+ * Ужимаем типографику и отступы, чтобы экраны оставались цельными.
+ */
+@media (max-height: 850px) {
+  .splash {
+    gap: 22px;
+  }
+
+  .gem__halo {
+    width: 236px;
+    height: 236px;
+  }
+
+  .splash__title {
+    font-size: 34px;
+  }
+
+  .chrome {
+    font-size: 26px;
+  }
+
+  .screen--center h1,
+  .swap__i {
+    font-size: 24px;
+    margin-bottom: 10px;
+  }
+
+  .screen--center .chrome--sm {
+    font-size: 20px;
+  }
+
+  h1 {
+    font-size: 27px;
+  }
+
+  .lead {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .feature__title {
+    font-size: 15px;
+  }
+
+  .feature__text {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .screen--fit .feature {
+    padding: 9px 0;
+  }
+
+  .sticker {
+    width: 128px;
+    margin: 14px auto 12px;
+  }
+
+  /*
+   * «О кошельке» — самый плотный из вводных экранов: заголовок, лид,
+   * четыре пункта и две кнопки. На коротком экране стикер уступает им
+   * место, иначе кнопки уходят под сгиб.
+   */
+  .about .sticker {
+    width: 76px;
+    /* На коротком экране зазор скромнее: иначе кнопки уходят под сгиб. */
+    margin-top: var(--sp-1);
+  }
+
+  .term__body {
+    height: clamp(260px, 50vh, 380px);
+    font-size: 12px;
+  }
+
+  .btn {
+    min-height: 50px;
+  }
+
+  .btn--link {
+    min-height: 42px;
+  }
+
+  .screen {
+    padding-top: calc(var(--safe-top) + 18px);
+  }
+
+  .screen--fit,
+  .screen--roomy {
+    padding-bottom: calc(var(--safe-bottom) + 34px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * Экран восстановления самый длинный из вводных: предупреждение, карточка
+ * с двумя полями, оговорка и две кнопки. Шаг ритма здесь меньше общего,
+ * иначе кнопки уходят под сгиб и человек их не находит.
+ */
+.import {
+  --stack: 12px;
+}
+
+/*
+ * Оговорка под карточкой.
+ *
+ * Это не сноска, а условие, без которого экран понят неверно: на импорте —
+ * что без адреса кошелёк после ротации не найти, на PIN — от чего он
+ * защищает на самом деле. Поэтому тот же кегль и вес, что у подзаголовка,
+ * только по центру, и отдельно от карточки.
+ */
+.screen__hint {
+  max-width: 38ch;
+  margin: var(--air-sm) auto 0;
+  font-size: 15px;
+  line-height: var(--lh-text);
+  font-weight: 450;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/*
+ * Экран PIN короткий, и распорка отодвигала кнопки к самому низу — до них
+ * приходилось тянуться через четверть пустого экрана. Ограничиваем паузу:
+ * кнопки идут сразу за оговоркой, но не липнут к ней.
+ */
+.pin .screen__spacer {
+  flex: 0 0 auto;
+  height: var(--air-lg);
+}
+
+/*
+ * На экране PIN содержимого мало, и прижатое к потолку оно выглядело
+ * случайным. Отпускаем подзаголовок ниже заголовка, а кнопки — ниже
+ * оговорки: экран получает воздух сверху и снизу, а не только снизу.
+ */
+.pin .lead {
+  margin-top: var(--air-lg);
+}
+
+.pin .glass {
+  margin-top: var(--air-md);
+}
+
+.pin .screen__hint {
+  max-width: none;
+  margin-top: var(--air-md);
+}
+
+.pin .screen__spacer {
+  height: clamp(48px, 11vh, 120px);
+}
+
+/*
+ * Главный экран: адрес.
+ *
+ * Раньше он стоял строкой-подписью и был обрезан многоточием — по такому
+ * нельзя сверить, куда отправляешь. Теперь это первое, что видно на экране:
+ * заголовок в общем стиле и адрес целиком, моноширинным, чтобы символы
+ * можно было сверять по одному.
+ */
+.home .glow {
+  margin-top: var(--air-lg);
+}
+
+.address {
+  margin-top: var(--air-md);
+  padding: 18px 16px;
+}
+
+.address__text {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 16px;
+  line-height: 1.65;
+  text-align: center;
+  color: var(--ink);
+  user-select: all;
+}
+
+.address__actions {
+  margin-top: var(--sp-3);
+}
+
+/* --- Главный экран ------------------------------------------------------- */
+
+.address {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.address__text {
+  flex: 1;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 16px;
+  line-height: 1.65;
+  text-align: center;
+  color: var(--ink);
+}
+
+/* Круглая кнопка-иконка на светлой карточке. */
+.btn-icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.12s var(--ease), background 0.2s var(--ease);
+}
+
+.btn-icon:active {
+  transform: scale(0.92);
+  background: #ffffff;
+}
+
+/*
+ * Баланс без карточки: это главная цифра экрана, и рамка вокруг неё
+ * только мельчит. Подпись — мелкая и серая, цифра — во весь голос.
+ */
+.balance-box {
+  margin-top: var(--air-md);
+  text-align: center;
+}
+
+.balance__label {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.balance-box .balance {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: clamp(46px, 13vw, 62px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  color: #f2f7fd;
+}
+
+.balance-box .balance__coin {
+  margin-left: 8px;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-dim);
+}
+
+.home__status:empty,
+.home__assets:empty {
+  display: none;
+}
+
+.home__status {
+  margin-top: var(--air-md);
+}
+
+.home__nav {
+  display: flex;
+  gap: 10px;
+}
+
+.home__nav .btn {
+  flex: 1;
+  min-height: 42px;
+  font-size: 14px;
+}
+
+/* --- Токены и NFT -------------------------------------------------------- */
+
+.assets + .assets {
+  margin-top: var(--air-sm);
+}
+
+.assets__title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.asset {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.asset:last-child {
+  border-bottom: 0;
+}
+
+.asset__name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.asset__value {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+/* --- История ------------------------------------------------------------- */
+
+.history {
+  text-align: left;
+}
+
+.op {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.op:last-child {
+  border-bottom: 0;
+}
+
+.op__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.op__kind {
+  font-weight: 600;
+}
+
+.op__amount {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 15px;
+}
+
+.op--in .op__amount {
+  color: #9fd8b4;
+}
+
+.op--out .op__amount {
+  color: #e8b4b4;
+}
+
+.op__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.op__comment {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* Терминал деплоя короче: строк в нём немного. */
+.term--compact .term__body {
+  height: auto;
+  min-height: 180px;
+  max-height: 260px;
+}
+
+.term__row--danger {
+  color: #ff9a9a;
+}
+
+/*
+ * Камень у баланса.
+ *
+ * Короткий отклик на касание: два оборота с торможением и две вспышки
+ * света. Не раскрутка с третьего экрана — там она событие, здесь просто
+ * знак, что приложение живое.
+ */
+.balance-box .balance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Камень стоит отдельно от цифры, а не вплотную к первому нулю. */
+  gap: 22px;
+}
+
+.balance__gem {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.balance__gem .gem {
+  filter: drop-shadow(0 10px 26px rgba(150, 190, 255, 0.28));
+}
+
+/*
+ * У камня на главном постоянное «дыхание» выключено: оно шло по тому же
+ * transform, что и оборот, и на выходе из анимации давало рывок.
+ */
+.balance__gem .gem {
+  animation: none;
+}
+
+.balance__gem.gem-tap .gem {
+  perspective: 700px;
+  animation: gem-tap-flash 1.25s cubic-bezier(0.4, 0, 0.35, 1) both;
+}
+
+.gem-tap .gem svg {
+  animation: gem-tap-spin 1.25s cubic-bezier(0.18, 0.72, 0.2, 1) both;
+}
+
+@keyframes gem-tap-spin {
+  from {
+    transform: perspective(700px) rotateX(12deg) rotateY(0deg);
+  }
+  to {
+    transform: perspective(700px) rotateX(12deg) rotateY(720deg);
+  }
+}
+
+/*
+ * Вспышки на обороте.
+ *
+ * В каждом кадре ровно те же функции фильтра и в том же порядке. Раньше
+ * на крайних кадрах brightness не было вовсе, и браузер переключал фильтры
+ * скачком вместо плавного перехода: свет гас рывком и смещал тень.
+ *
+ * Пики намеренно ниже к концу — свет догорает, а не обрывается.
+ */
+@keyframes gem-tap-flash {
+  0% {
+    filter: brightness(1) drop-shadow(0 10px 26px rgba(150, 190, 255, 0.28));
+  }
+  18% {
+    filter: brightness(1.42) drop-shadow(0 10px 34px rgba(190, 220, 255, 0.54));
+  }
+  36% {
+    filter: brightness(1.06) drop-shadow(0 10px 28px rgba(160, 200, 255, 0.34));
+  }
+  54% {
+    filter: brightness(1.28) drop-shadow(0 10px 31px rgba(185, 215, 255, 0.46));
+  }
+  76% {
+    filter: brightness(1.05) drop-shadow(0 10px 27px rgba(155, 195, 255, 0.3));
+  }
+  100% {
+    filter: brightness(1) drop-shadow(0 10px 26px rgba(150, 190, 255, 0.28));
+  }
+}
+
+.lock__exits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: var(--air-lg);
+}
+
+.lock__exits .btn {
+  min-height: 44px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+/*
+ * Ожидание баланса.
+ *
+ * Место цифры занимает брусок её размера, по которому идёт волна света —
+ * видно, что приложение спрашивает сеть, и цифра не прыгнет по ширине,
+ * когда ответ придёт.
+ */
+.balance__wait {
+  display: inline-block;
+  width: 4.4ch;
+  height: 0.66em;
+  border-radius: 12px;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.05) 22%,
+    rgba(190, 220, 255, 0.26) 44%,
+    rgba(255, 255, 255, 0.05) 66%
+  );
+  background-size: 280% 100%;
+  animation: balance-wait 1.4s linear infinite;
+  vertical-align: 0.02em;
+}
+
+@keyframes balance-wait {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .balance__wait {
+    animation: none;
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* Вторая мысль в той же плашке — тем же голосом, но отдельной строкой. */
+.note__more {
+  margin-top: 10px;
+}
+
+.op__link {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: #8fb6f0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(143, 182, 240, 0.4);
+}
+
+.op__link:active {
+  color: #b7d2ff;
+}
+
+/* --- Выбор актива на экране отправки ------------------------------------ */
+
+/*
+ * Ряд чипов: GRAM, токены, NFT. Прокручивается вбок — список у каждого свой,
+ * и загонять его в высоту экрана бессмысленно.
+ */
+.assets-pick {
+  display: flex;
+  gap: 8px;
+  margin-top: var(--sp-2);
+  padding-bottom: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.assets-pick::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.chip--on {
+  border-color: rgba(190, 220, 255, 0.5);
+  background: rgba(190, 220, 255, 0.16);
+  color: #eaf2ff;
+}
+
+/*
+ * Первый экран, собранный вокруг прилетевшего камня.
+ *
+ * Сам экран не проявляется — иначе камень мигнёт на старте перелёта. Текст
+ * и кнопки входят чуть позже, когда камень уже почти на месте: так виден
+ * именно перелёт, а не общее появление страницы.
+ */
+.screen.handoff {
+  animation: none;
+}
+
+.screen.handoff > *:not(.intro__gem) {
+  animation: fade-in 0.5s 0.34s var(--ease) both;
+}
+
+/* --- Рукописная подпись у стикера ---------------------------------------- */
+
+/*
+ * Утка и надпись стоят рядом: подпись — её реплика, а не отдельный блок.
+ * Поэтому .sticker из колонки становится строкой, а ширина задаётся
+ * картинке, а не контейнеру.
+ */
+.about .sticker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: auto;
+}
+
+.about .sticker__img {
+  width: 112px;
+}
+
+.scribble {
+  width: 74px;
+  height: auto;
+  overflow: visible;
+  fill: none;
+  stroke: #e8f0fb;
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 10px rgba(150, 190, 255, 0.45));
+}
+
+/*
+ * Штрих выкладывается из ничего: длина линии заранее неизвестна, поэтому
+ * берём заведомо большую (300) — для наших букв её хватает с запасом.
+ */
+.scribble path {
+  stroke-dasharray: 300;
+  stroke-dashoffset: 300;
+  animation: write 0.5s var(--ease) both;
+}
+
+@keyframes write {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scribble path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/*
+ * Заголовок, разбитый на строки вручную.
+ *
+ * «Поздравляем! Кошелёк создан!» автопереносом ломается по случайному
+ * месту — то после «Кошелёк», то посреди восклицания. Перевод строки
+ * стоит в самом тексте, а pre-line переносит его и в ауре позади букв.
+ */
+.glow--lines {
+  white-space: pre-line;
+}
+
+/*
+ * Место под заголовок в две строки: подзаголовок и предупреждение уходят
+ * ниже, иначе строки стоят вплотную и заголовок выглядит зажатым.
+ */
+.reveal .glow--lines + .lead {
+  margin-top: var(--air-md);
+}
+
+.reveal .note {
+  margin-top: var(--air-sm);
+}
+
+/* --- Поле PIN ------------------------------------------------------------ */
+
+/*
+ * Поле ровно под шесть символов, а не во всю карточку: пустая половина
+ * читалась как «сюда можно ещё». Рядом счётчик — звёздочки идут вплотную,
+ * и на глаз их не сосчитать.
+ */
+.pin-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.field--pin .input--pin {
+  width: 178px;
+  flex: 0 0 auto;
+}
+
+.pin-dots {
+  display: flex;
+  gap: 7px;
+}
+
+.pin-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  background: transparent;
+  transition: background 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.pin-dot--on {
+  border-color: transparent;
+  background: #2e7dff;
+  transform: scale(1.15);
+}
+
+/* В тёмной шторке подтверждения карточки нет — точки светлые. */
+.modal__sheet .pin-dot {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.modal__sheet .pin-dot--on {
+  background: #7fb3ff;
+}
+
+/* Кнопка под отработавшим терминалом: убрать лог, когда он больше не нужен. */
+.home__status .btn {
+  margin-top: var(--sp-2);
+  min-height: 42px;
+  font-size: 14px;
+}
+
+/* --- Подпись автора в настройках ----------------------------------------- */
+
+.credits {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: var(--air-md);
+  font-size: 14px;
+}
+
+.credits__dev {
+  color: var(--text-dim);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(154, 161, 173, 0.4);
+}
+
+.credits__gh {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-dim);
+}
+
+.credits__gh svg {
+  fill: currentColor;
+}
+
+/* Пока репозитория нет, значок висит приглушённым и никуда не ведёт. */
+.credits__gh--off {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* --- Смена seed-фразы ---------------------------------------------------- */
+
+.rotate .glass {
+  text-align: left;
+}
+
+.rotate__row {
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  color: var(--ink);
+}
+
+.rotate__row:last-child {
+  border-bottom: 0;
+}
+
+.rotate .screen__hint {
+  max-width: none;
+}
