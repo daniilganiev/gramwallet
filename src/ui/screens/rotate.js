@@ -11,6 +11,17 @@ import { requirePin } from "./lock.js";
  * Смена ключа. Адрес при этом не меняется — он посчитан от первого ключа
  * и зафиксирован навсегда. Поэтому новый бэкап обязан содержать и фразу,
  * и адрес: по одной фразе кошелёк потом не найти.
+ *
+ * Необратимое действие стоит в самом конце, и до него человек видит слова
+ * целиком. Раньше порядок читался наоборот: слова показывались там, где
+ * кнопки «сменить» на экране уже не было, будто смена произошла, а дальше
+ * шёл экзамен на три слова. С экзамена уходили кнопкой «назад» — уверенные,
+ * что фраза новая, хотя кошелёк всё это время работал на старой.
+ *
+ * Двадцать четыре слова не помещаются в экран телефона вместе с адресом
+ * и кнопкой, а листать их человек не обязан: пропущенное слово он заметит
+ * только тогда, когда кошелёк уже понадобится. Поэтому фраза идёт двумя
+ * половинами, каждая целиком в экране.
  */
 export function rotateScreen(ctx) {
   // Сессии может не быть после перезагрузки страницы — уводим на PIN.
@@ -20,11 +31,13 @@ export function rotateScreen(ctx) {
   }
 
   const screen = el("div.screen.stack.rotate");
+  const address = ctx.wallet.address.toString({ bounceable: true });
   let stage = "warn";
   let mnemonic = null;
 
   const render = () => {
-    screen.replaceChildren(...({ warn, phrase, verify }[stage]()));
+    screen.replaceChildren(...({ warn, first, second }[stage]()));
+    screen.scrollTop = 0;
   };
 
   const warn = () => [
@@ -34,9 +47,9 @@ export function rotateScreen(ctx) {
     }),
 
     el("div.glass", {}, [
-      el("div.rotate__row", { text: "Старая фраза перестанет работать сразу." }),
-      el("div.rotate__row", { text: "Отката нет — контракт не помнит прежние ключи." }),
-      el("div.rotate__row", { text: "Менять фразу можно сколько угодно раз." }),
+      el("div.rotate__row", { text: "Старая фраза перестанет работать" }),
+      el("div.rotate__row", { text: "Вернуть её обратно нельзя" }),
+      el("div.rotate__row", { text: "Менять фразу можно сколько угодно" }),
     ]),
 
     el("p.screen__hint", {
@@ -45,65 +58,53 @@ export function rotateScreen(ctx) {
 
     el("div.screen__spacer"),
     el("div.screen__actions", {}, [
-      primaryButton("Продолжить", async () => {
+      // Не «Продолжить»: кнопка должна называть то, что произойдёт по нажатию,
+      // а произойдут пока только новые слова на экране.
+      primaryButton("Показать новую фразу", async () => {
         mnemonic = await mnemonicNew(24);
-        stage = "phrase";
+        stage = "first";
         render();
       }),
       linkButton("Отмена", () => ctx.go("settings")),
     ]),
   ];
 
-  const phrase = () => [
-    el("h1.glow", { "data-t": "Новая seed-фраза", text: "Новая seed-фраза" }),
-    el("p.lead", { text: "Запишите её целиком. Старая перестанет работать сразу после смены." }),
-
+  /** Половина фразы: слова с from по to включительно. */
+  const half = (from, to) =>
     el(
       "div.glass",
-      {}, [
+      {},
+      [
         el(
           "div.words",
           {},
-          mnemonic.map((w, i) =>
-            el("div.word", {}, [el("span.word__n", { text: String(i + 1) }), el("span", { text: w })]),
+          mnemonic.slice(from - 1, to).map((w, i) =>
+            el("div.word", {}, [
+              el("span.word__n", { text: String(from + i) }),
+              el("span", { text: w }),
+            ]),
           ),
         ),
       ],
-    ),
+    );
 
-    el("div.glass.glass--tight", {}, [
-      el("div.faint", { text: "Адрес кошелька — сохраните вместе с фразой" }),
-      el("div.mono", { text: ctx.wallet.address.toString({ bounceable: true }) }),
-    ]),
+  const first = () => [
+    el("h1.glow", { "data-t": "Новая seed-фраза", text: "Новая seed-фраза" }),
+    el("p.lead", { text: "Слова с 1 по 12. Кошелёк пока работает на старой фразе." }),
+
+    half(1, 12),
 
     el("div.screen__spacer"),
     el("div.screen__actions", {}, [
-      primaryButton("Я записал", () => {
-        stage = "verify";
+      primaryButton("Дальше", () => {
+        stage = "second";
         render();
       }),
-      linkButton("Скопировать фразу и адрес", async () => {
-        const ok = await copyText(
-          `${mnemonic.join(" ")}\n\nАдрес: ${ctx.wallet.address.toString({ bounceable: true })}`,
-        );
-        toast(ok ? "Скопировано" : "Не удалось скопировать", { error: !ok });
-      }),
+      linkButton("Отмена", () => ctx.go("settings")),
     ]),
   ];
 
-  const verify = () => {
-    const indexes = [...new Set([1, 1 + Math.floor(Math.random() * 22), 24])].sort((a, b) => a - b);
-    const inputs = indexes.map((n) =>
-      el("input.input", {
-        type: "text",
-        autocapitalize: "none",
-        autocomplete: "off",
-        spellcheck: false,
-        placeholder: `Слово №${n}`,
-      }),
-    );
-    const error = el("div.field__error", { style: "display:none" });
-
+  const second = () => {
     const apply = el("button.btn.btn--primary", {
       type: "button",
       text: "Сменить seed-фразу",
@@ -111,14 +112,6 @@ export function rotateScreen(ctx) {
         runAction(
           apply,
           async () => {
-            const wrong = indexes.some((n, i) => inputs[i].value.trim().toLowerCase() !== mnemonic[n - 1]);
-            if (wrong) {
-              error.textContent = "Слова не совпали. Проверьте запись.";
-              error.style.display = "";
-              haptic("error");
-              return;
-            }
-
             const pin = await requirePin();
             if (!pin) return;
 
@@ -143,7 +136,7 @@ export function rotateScreen(ctx) {
             });
 
             haptic("success");
-            toast("Ключ сменён. Адрес остался прежним.");
+            toast("Фраза сменена. Адрес остался прежним.");
             ctx.go("home");
           },
           { loadingText: "Меняем ключ" },
@@ -151,17 +144,30 @@ export function rotateScreen(ctx) {
     });
 
     return [
-      el("h1.glow", { "data-t": "Проверим запись", text: "Проверим запись" }),
-      el("p.lead", { text: "Введите три слова из новой фразы — так мы убедимся, что она сохранена." }),
-      el("div.glass", {}, indexes.map((n, i) =>
-        el("label.field", {}, [el("span.field__label", { text: `Слово №${n}` }), inputs[i]]),
-      )),
-      error,
+      el("h1.glow", { "data-t": "Новая seed-фраза", text: "Новая seed-фраза" }),
+      el("p.lead", { text: "Слова с 13 по 24. Фраза заработает после нажатия кнопки внизу." }),
+
+      half(13, 24),
+
+      // Адрес ломаем пополам сами: иначе перенос по ширине оставляет
+      // на второй строке один символ.
+      el("div.glass.glass--tight.rotate__address", {}, [
+        el("div.faint", { text: "Адрес кошелька" }),
+        el("div.mono", {}, [
+          el("div", { text: address.slice(0, 24) }),
+          el("div", { text: address.slice(24) }),
+        ]),
+      ]),
+
       el("div.screen__spacer"),
       el("div.screen__actions", {}, [
         apply,
-        linkButton("Показать фразу снова", () => {
-          stage = "phrase";
+        linkButton("Скопировать фразу и адрес", async () => {
+          const ok = await copyText(`${mnemonic.join(" ")}\n\nАдрес: ${address}`);
+          toast(ok ? "Скопировано" : "Не удалось скопировать", { error: !ok });
+        }),
+        linkButton("Первые 12 слов", () => {
+          stage = "first";
           render();
         }),
       ]),
