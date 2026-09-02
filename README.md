@@ -1,3 +1,5 @@
+**Русский** · [English](README.en.md)
+
 # Gram Wallet
 
 Telegram Mini App — некастодиальный кошелёк для GRAM на контракте WalletTg:
