@@ -5,7 +5,7 @@ import { linkButton, runAction, sheet, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { COIN } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
-import { fetchJettons, fetchNfts } from "../../core/assets.js";
+import { fetchJettons } from "../../core/assets.js";
 import { JETTON_ATTACH, NFT_ATTACH, jettonTransferBody, nftTransferBody } from "../../core/transfers.js";
 
 /**
@@ -40,8 +40,15 @@ export function sendScreen(ctx) {
   const wallet = ctx.wallet;
   const mine = wallet.address.toString({ bounceable: false });
 
-  // Что отправляем. GRAM есть всегда, остальное подгружается.
-  let asset = { id: "coin", kind: "coin", symbol: COIN, decimals: 9 };
+  /*
+   * Что отправляем. GRAM есть всегда, токены подгружаются, а NFT приходит
+   * только снаружи: его выбирают нажатием на самом кошельке, а не из списка.
+   * Иначе строка выбора превращалась в свалку из десятка предметов.
+   */
+  const picked = ctx.sendAsset ?? null;
+  ctx.sendAsset = null;
+
+  let asset = picked ?? { id: "coin", kind: "coin", symbol: COIN, decimals: 9 };
   let balance = null;
 
   const picker = el("div.assets-pick");
@@ -96,6 +103,12 @@ export function sendScreen(ctx) {
 
   picker.append(chip("coin", COIN, { kind: "coin", symbol: COIN, decimals: 9 }));
 
+  // Выбранный предмет показываем отдельной фишкой: видно, что именно уйдёт,
+  // и можно передумать, переключившись на GRAM или токен.
+  if (picked?.kind === "nft") {
+    picker.append(chip(picked.id, picked.name === "NFT" ? picked.collection || "NFT" : picked.name, picked));
+  }
+
   wallet
     .getBalance()
     .then((b) => {
@@ -108,16 +121,9 @@ export function sendScreen(ctx) {
 
   // Токены и NFT приезжают позже — экран уже работает с GRAM.
   (async () => {
-    const [jettons, nfts] = await Promise.all([
-      fetchJettons(mine, wallet.network).catch(() => []),
-      fetchNfts(mine, wallet.network).catch(() => []),
-    ]);
+    const jettons = await fetchJettons(mine, wallet.network).catch(() => []);
     for (const j of jettons) {
       picker.append(chip(`j:${j.jetton}`, j.symbol, { kind: "jetton", ...j }));
-    }
-    for (const n of nfts) {
-      const label = n.name === "NFT" ? n.collection || "NFT" : n.name;
-      picker.append(chip(`n:${n.address}`, label, { kind: "nft", ...n }));
     }
     showAsset();
   })();

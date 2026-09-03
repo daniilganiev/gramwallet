@@ -277,10 +277,19 @@ export function homeScreen(ctx) {
           el("span.asset__value", { text: j.amount }),
         ]),
       ),
+      // Нажатие по предмету ведёт сразу на его отправку: карточки NFT
+      // у нас нет, а это единственное, что с ним тут можно сделать.
       section("NFT", nfts, "Пока пусто.", (n) =>
-        el("div.asset", {}, [
+        el("div.asset.asset--tap", {
+          onclick: () => {
+            haptic("light");
+            ctx.sendAsset = { id: `n:${n.address}`, kind: "nft", ...n };
+            ctx.go("send");
+          },
+        }, [
           el("span.asset__name", { text: n.name }),
           el("span.asset__value", { text: n.collection }),
+          el("span.asset__go", { text: "›" }),
         ]),
       ),
     );
