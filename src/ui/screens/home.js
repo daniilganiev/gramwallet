@@ -26,6 +26,13 @@ const BALANCE_EVERY = 5000;
  */
 const ASSETS_EVERY = 30000;
 
+/**
+ * Сколько ждём пополнение после нажатия «Я пополнил»: перевод доходит
+ * за несколько секунд, и отвечать «не видно» раньше — значит спорить
+ * с человеком о том, что он только что сделал.
+ */
+const LOOK_FOR_TOPUP_MS = 12000;
+
 /** Баланс всегда с тремя знаками: цифра не прыгает по ширине при обновлении. */
 function grams(nano) {
   const [whole, frac = ""] = fromNano(nano ?? 0n).split(".");
@@ -330,21 +337,36 @@ export function homeScreen(ctx) {
         runAction(
           check,
           async () => {
-            const fresh = await wallet.getState();
-            const now = fresh.balance ?? 0n;
-            seen.balance = now;
-            showBalance(now);
+            /*
+             * Смотрим несколько раз подряд, а не один.
+             *
+             * Человек жмёт кнопку сразу, как отправил перевод, а тому нужно
+             * несколько секунд до включения в блок. Один запрос успевал
+             * ответить «пусто» — и получалось, что кошелёк спорит с тем, что
+             * человек только что сделал своими руками.
+             */
+            const need = toNano(MIN_DEPLOY_BALANCE);
+            const deadline = Date.now() + LOOK_FOR_TOPUP_MS;
+            let now = 0n;
 
-            if (now < toNano(MIN_DEPLOY_BALANCE)) {
-              haptic("error");
-              toast(`Пополнения пока не видно. Нужно хотя бы ${MIN_DEPLOY_BALANCE} ${COIN}.`, {
-                error: true,
-              });
-              return;
+            for (;;) {
+              now = (await wallet.getState()).balance ?? 0n;
+              seen.balance = now;
+              showBalance(now);
+              if (now >= need) break;
+              if (Date.now() >= deadline) {
+                haptic("error");
+                toast(`Пополнения пока не видно.\nНужно хотя бы ${MIN_DEPLOY_BALANCE} ${COIN}.`, {
+                  error: true,
+                });
+                return;
+              }
+              await sleep(2500);
             }
+
             await runDeploy(now);
           },
-          { loadingText: "Проверяем" },
+          { loadingText: "Ищем пополнение" },
         ),
     });
 
