@@ -3488,8 +3488,15 @@ textarea.input {
   margin-top: var(--air-lg);
   font-size: 13px;
   line-height: 1.55;
+  text-align: center;
 }
 
 .settings__note .note__more {
   margin-top: 6px;
+}
+
+/* Утка на экране смены фразы: чуть меньше, чем на втором экране. */
+.rotate__duck {
+  width: 128px;
+  margin: 0 auto;
 }

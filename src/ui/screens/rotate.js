@@ -56,7 +56,15 @@ export function rotateScreen(ctx) {
       text: "Новую фразу сохраните вместе с адресом: после смены адрес из фразы уже не выводится.",
     }),
 
+    // Утка занимает пустоту между предупреждением и кнопкой: экран с одними
+    // запретами читается тяжело, а тут решение принимают спокойно.
     el("div.screen__spacer"),
+    el("div.sticker.rotate__duck", {}, [
+      el("div.sticker__glow"),
+      el("img.sticker__img", { src: "/utya2.gif", alt: "", loading: "eager", decoding: "async" }),
+    ]),
+    el("div.screen__spacer"),
+
     el("div.screen__actions", {}, [
       // Не «Продолжить»: кнопка должна называть то, что произойдёт по нажатию,
       // а произойдут пока только новые слова на экране.
