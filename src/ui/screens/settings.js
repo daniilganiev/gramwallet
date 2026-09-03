@@ -1,6 +1,6 @@
 import { el, copyText, shortAddress } from "../dom.js";
 import { githubMark, glassButton, linkButton, primaryButton, sheet, toast } from "../components.js";
-import { openLink } from "../../telegram.js";
+import { haptic, openLink } from "../../telegram.js";
 import { APP_REPO_URL } from "../../core/constants.js";
 import { unlock, wipe } from "../../crypto/vault.js";
 import { requirePin } from "./lock.js";
@@ -15,6 +15,12 @@ export function settingsScreen(ctx) {
 
   const wallet = ctx.wallet;
   const address = wallet.address.toString({ bounceable: true });
+
+  const copyAddress = async () => {
+    const ok = await copyText(address);
+    haptic(ok ? "light" : "error");
+    toast(ok ? "Адрес скопирован" : "Не удалось скопировать", { error: !ok });
+  };
 
   const showBackup = async () => {
     const pin = await requirePin();
@@ -79,7 +85,9 @@ export function settingsScreen(ctx) {
     // Монету из плашки убрали: GRAM подписан на каждой цифре в приложении,
     // и повторять его строкой справки незачем.
     el("div.glass.settings__card", {}, [
-      el("div.row", {}, [
+      // По строке с адресом жмут, чтобы его забрать, — значит она обязана
+      // копировать. Показан он коротко, в буфер уходит целиком.
+      el("div.row.row--tap", { onclick: copyAddress }, [
         el("span.dim", { text: "Адрес" }),
         el("span", { text: shortAddress(address, 6, 6) }),
       ]),
@@ -94,7 +102,7 @@ export function settingsScreen(ctx) {
     // Зачем этот кошелёк и где лежит ключ — коротко, на самом видном месте
     // экрана настроек: сюда заходят именно с этими вопросами.
     el("div.note.note--ok.settings__note", {}, [
-      el("div", { text: "Кошелёк создан для тестирования нового протокола WalletTg." }),
+      el("div", { text: "Кошелёк для тестирования нового протокола WalletTg." }),
       el("div.note__more", {
         text: "Данные зашифрованы (Argon2id + AES-GCM) и хранятся только на вашем устройстве.",
       }),

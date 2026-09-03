@@ -145,7 +145,11 @@ export function homeScreen(ctx) {
         cancelText: "Закрыть",
       });
     },
-  }, [el("span.whatsnew__spark", { text: "✦" }), el("span", { text: "Что нового" })]);
+  }, [
+    el("span.whatsnew__glow", { "aria-hidden": "true" }),
+    el("span.whatsnew__spark", { text: "✦" }),
+    el("span.whatsnew__text", { text: "Что нового" }),
+  ]);
 
   const screen = el("div.screen.stack.home", {}, [
     el("h1.glow", { "data-t": "Ваш кошелёк", text: "Ваш кошелёк" }),
