@@ -6,6 +6,12 @@ import { haptic } from "../../telegram.js";
 import { COIN } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
 
+/**
+ * Запас, который остаётся на кошельке сверх сумм и комиссии: оценка
+ * приблизительная, и упираться в ноль ровно нельзя.
+ */
+const RESERVE = toNano("0.001");
+
 /** Столько сообщений вмещает один запрос к контракту. */
 const MAX = 255;
 
@@ -209,6 +215,22 @@ export function batchScreen(ctx) {
             // Не оценили — скажем об этом в подтверждении, а не молча.
           }
 
+          /*
+           * Суммы пакета вместе с комиссией обязаны помещаться в баланс.
+           *
+           * Сообщения уходят с флагом IGNORE_ERRORS — без него контракт не
+           * принимает внешний запрос вовсе. Как только денег перестанет
+           * хватать, оставшиеся переводы будут молча пропущены, а транзакция
+           * всё равно окажется успешной.
+           */
+          if (fee !== null && balance !== null && total + fee + RESERVE > balance) {
+            haptic("error");
+            return toast(
+              `Не хватает ${fromNano(total + fee + RESERVE - balance)} ${COIN} на суммы вместе с комиссией.`,
+              { error: true },
+            );
+          }
+
           const line = (label, value) =>
             el("div.row", {}, [el("span.dim", { text: label }), el("span", { text: value })]);
 
@@ -218,9 +240,7 @@ export function batchScreen(ctx) {
               line("Получателей", String(messages.length)),
               line("Всего", `${fromNano(total)} ${COIN}`),
               line("Комиссия сети", fee === null ? "не удалось оценить" : `≈ ${fromNano(fee)} ${COIN}`),
-              el("p.faint", {
-                text: "Одна подпись на всех: пакет уходит целиком или не уходит вовсе.",
-              }),
+              el("p.faint", { text: "Одна подпись и одна комиссия сети на всех получателей." }),
             ]),
             confirmText: "Отправить",
           });
@@ -229,6 +249,13 @@ export function batchScreen(ctx) {
           const res = await wallet.send(messages);
           if (!res.confirmed) {
             toast("Пакет ушёл, но подтверждения пока нет. Проверьте баланс через минуту.", {
+              error: true,
+            });
+          } else if (res.delivered === false) {
+            // Часть действий контракт пропустил — почти всегда это нехватка
+            // средств на хвост списка. Показать это обязаны.
+            haptic("error");
+            toast("Ушли не все переводы: денег хватило не на всех. Проверьте историю.", {
               error: true,
             });
           } else {

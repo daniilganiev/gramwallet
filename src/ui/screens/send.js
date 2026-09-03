@@ -1,4 +1,4 @@
-import { Address, fromNano } from "@ton/core";
+import { Address, fromNano, toNano } from "@ton/core";
 
 import { el, fmtCoins, shortAddress } from "../dom.js";
 import { linkButton, runAction, sheet, toast } from "../components.js";
@@ -7,6 +7,12 @@ import { COIN } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
 import { fetchJettons, fetchNfts } from "../../core/assets.js";
 import { JETTON_ATTACH, NFT_ATTACH, jettonTransferBody, nftTransferBody } from "../../core/transfers.js";
+
+/**
+ * Запас, который обязан остаться на кошельке сверх суммы и комиссии.
+ * Оценка комиссии приблизительная, и упереться в ноль ровно — плохая идея.
+ */
+const RESERVE = toNano("0.001");
 
 /** Сумма в наименьших единицах токена: «0.03» при decimals 6 → 30000n. */
 function toUnits(text, decimals) {
@@ -179,6 +185,7 @@ export function sendScreen(ctx) {
               haptic("error");
               return toast("На балансе столько нет — нужно оставить и на комиссию", { error: true });
             }
+
             if (asset.kind === "jetton" && units > BigInt(asset.raw)) {
               haptic("error");
               return toast(`Токена столько нет: доступно ${asset.amount} ${asset.symbol}`, {
@@ -197,6 +204,30 @@ export function sendScreen(ctx) {
             fee = await wallet.estimateFee(message);
           } catch (e) {
             feeError = explainError(e);
+          }
+
+          /*
+           * Сумма вместе с комиссией обязана помещаться в баланс.
+           *
+           * Контракт шлёт сообщения с флагом IGNORE_ERRORS — иначе он вообще
+           * не принимает внешний запрос. Флаг означает, что при нехватке
+           * денег действие молча пропускается: транзакция успешна, seqno
+           * растёт, перевода нет. Поэтому не пускаем такой перевод вовсе.
+           */
+          if (fee !== null && balance !== null) {
+            const value = asset.kind === "coin" ? toUnits(raw, 9) : toNano(message.amount);
+            if (value + fee + RESERVE > balance) {
+              haptic("error");
+              const room = balance - fee - RESERVE;
+              return toast(
+                asset.kind === "coin"
+                  ? room > 0n
+                    ? `Не хватит на комиссию. Максимум к отправке — ${fromNano(room)} ${COIN}.`
+                    : `На комиссию не хватает ${COIN}. Пополните кошелёк.`
+                  : `Не хватает ${COIN} на газ: нужно ещё ${fromNano(value + fee + RESERVE - balance)} ${COIN}.`,
+                { error: true },
+              );
+            }
           }
 
           const attached = asset.kind === "coin" ? null : message.amount;
@@ -228,6 +259,13 @@ export function sendScreen(ctx) {
 
           if (!res.confirmed) {
             toast("Перевод ушёл, но подтверждения пока нет. Проверьте баланс через минуту.", {
+              error: true,
+            });
+          } else if (res.delivered === false) {
+            // Запрос приняли, но сообщение контракт не отправил: на балансе
+            // не хватило на сумму вместе с комиссией. Молчать об этом нельзя.
+            haptic("error");
+            toast("Сеть приняла запрос, но перевод не ушёл: не хватило на сумму вместе с комиссией.", {
               error: true,
             });
           } else {

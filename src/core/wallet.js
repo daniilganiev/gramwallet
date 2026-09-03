@@ -176,8 +176,36 @@ export class TgWallet {
     });
     await this.#sendBoc(beginCell().store(storeMessage(ext)).endCell().toBoc());
 
-    if (!wait) return { seqno, confirmed: false };
-    return { seqno, confirmed: await this.waitForSeqno(seqno + 1, { timeoutMs }) };
+    if (!wait) return { seqno, confirmed: false, delivered: null };
+
+    const confirmed = await this.waitForSeqno(seqno + 1, { timeoutMs });
+    if (!confirmed) return { seqno, confirmed: false, delivered: null };
+    return { seqno, confirmed: true, delivered: await this.#delivered(messages.length) };
+  }
+
+  /**
+   * Ушли ли сообщения на самом деле.
+   *
+   * Рост seqno доказывает только то, что контракт принял запрос и подпись
+   * верна. Слать сообщения он обязан с флагом IGNORE_ERRORS, а тот означает
+   * буквально следующее: если денег на сумму вместе с комиссией не хватило,
+   * действие молча пропускается. Транзакция при этом успешна, seqno растёт,
+   * перевода нет — и мы говорили «Отправлено».
+   *
+   * Возвращает null, если проверить не удалось: врать в другую сторону тоже
+   * нельзя.
+   */
+  async #delivered(expected) {
+    try {
+      const txs = await this.providers.call((c) => c.getTransactions(this.address, { limit: 2 }));
+      const tx = txs.find((t) => t.inMessage?.info?.type === "external-in");
+      const action = tx?.description?.type === "generic" ? tx.description.actionPhase : null;
+      if (!action) return null;
+      if (Number(action.skippedActions ?? 0) > 0) return false;
+      return Number(action.messagesCreated ?? 0) >= expected;
+    } catch {
+      return null;
+    }
   }
 
   /**
