@@ -3454,3 +3454,25 @@ textarea.input {
   line-height: 1.5;
   white-space: pre-line;
 }
+
+/*
+ * Адрес контрагента в истории: кнопка со штриховым подчёркиванием, чтобы
+ * было видно, что по ней можно нажать, но чтобы она не спорила с суммой.
+ */
+.op__peer {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-dim);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(154, 161, 173, 0.35);
+  cursor: pointer;
+  transition: color 0.18s var(--ease);
+}
+
+.op__peer:active {
+  color: var(--text);
+}

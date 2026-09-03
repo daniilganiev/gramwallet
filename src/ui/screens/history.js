@@ -1,6 +1,6 @@
-import { el, shortAddress } from "../dom.js";
-import { glassButton, linkButton } from "../components.js";
-import { openLink } from "../../telegram.js";
+import { el, copyText, shortAddress } from "../dom.js";
+import { glassButton, linkButton, toast } from "../components.js";
+import { haptic, openLink } from "../../telegram.js";
 import { fetchHistory, hashToHex } from "../../core/assets.js";
 import { explainError } from "../../core/client.js";
 
@@ -54,7 +54,24 @@ export function historyScreen(ctx) {
             ]),
             el("div.op__meta", {}, [
               el("span", { text: when(r.at) }),
-              r.peer ? el("span.op__peer", { text: shortAddress(r.peer, 6, 6) }) : el("span"),
+
+              /*
+               * Адрес второй стороны — кнопка, а не подпись. Из истории его
+               * чаще всего и берут: повторить перевод, ответить, занести
+               * в заметки. Показываем коротко, копируем целиком.
+               */
+              r.peer
+                ? el("button.op__peer", {
+                    type: "button",
+                    title: "Скопировать адрес",
+                    text: `${r.kind === "out" ? "кому" : "от"} ${shortAddress(r.peer, 6, 6)}`,
+                    onclick: async () => {
+                      const ok = await copyText(r.peer);
+                      haptic(ok ? "light" : "error");
+                      toast(ok ? "Адрес скопирован" : "Не удалось скопировать", { error: !ok });
+                    },
+                  })
+                : el("span"),
             ]),
             r.comment ? el("div.op__comment", { text: r.comment }) : el("span"),
 

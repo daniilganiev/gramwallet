@@ -150,12 +150,35 @@ export async function fetchHistory(address, network = "mainnet", limit = 100) {
     network,
   );
 
-  // Свой адрес в сыром виде: события говорят на нём.
-  const raw = Object.entries(data.address_book ?? {}).find(
-    ([, v]) => v.user_friendly === mine || v.user_friendly === Address.parse(mine).toString({ bounceable: true }),
-  )?.[0];
-  const self = (a) => Boolean(a) && (a === raw || data.address_book?.[a]?.user_friendly === mine);
-  const friendly = (a) => (a ? (data.address_book?.[a]?.user_friendly ?? a) : null);
+  /*
+   * Направление считаем сравнением самих адресов, а не строк.
+   *
+   * Раньше свой адрес искался по справочнику индексатора, а тот пишет туда
+   * неотскакивающую форму (UQ…), тогда как историю мы спрашиваем в
+   * отскакивающей (EQ…). Строки не совпадали никогда — свой адрес не
+   * узнавался, и любая операция, включая собственные переводы, показывалась
+   * как приход.
+   */
+  const me = Address.parse(mine);
+  const isMine = (a) => {
+    try {
+      return Boolean(a) && Address.parse(a).equals(me);
+    } catch {
+      return false;
+    }
+  };
+
+  /** Адрес контрагента в том виде, в каком его показывают обозреватели. */
+  const friendly = (a) => {
+    if (!a) return null;
+    const known = data.address_book?.[a]?.user_friendly;
+    if (known) return known;
+    try {
+      return Address.parse(a).toString({ bounceable: false });
+    } catch {
+      return a;
+    }
+  };
   const token = (a) => data.metadata?.[a]?.token_info?.[0] ?? {};
 
   return (data.actions ?? []).map((act) => {
@@ -169,13 +192,13 @@ export async function fetchHistory(address, network = "mainnet", limit = 100) {
     };
 
     if (act.type === "ton_transfer") {
-      const out = self(d.source);
+      const out = isMine(d.source);
       return { ...row, kind: out ? "out" : "in", title: out ? "Отправлено" : "Получено",
         amount: fmtUnits(d.value, 9), unit: "GRAM", peer: friendly(out ? d.destination : d.source) };
     }
 
     if (act.type === "jetton_transfer") {
-      const out = self(d.sender);
+      const out = isMine(d.sender);
       const info = token(d.asset);
       return { ...row, kind: out ? "out" : "in", title: out ? "Отправлен токен" : "Получен токен",
         amount: fmtUnits(d.amount, info.extra?.decimals ?? info.decimals ?? 9),
@@ -183,7 +206,7 @@ export async function fetchHistory(address, network = "mainnet", limit = 100) {
     }
 
     if (act.type === "nft_transfer") {
-      const out = self(d.old_owner);
+      const out = isMine(d.old_owner);
       const item = token(d.nft_item);
       const collection = token(d.nft_collection);
       return { ...row, kind: out ? "out" : "in", title: out ? "Отправлен NFT" : "Получен NFT",
