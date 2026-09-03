@@ -91,6 +91,15 @@ export function settingsScreen(ctx) {
       glassButton("Сменить seed-фразу", () => ctx.go("rotate")),
     ]),
 
+    // Зачем этот кошелёк и где лежит ключ — коротко, на самом видном месте
+    // экрана настроек: сюда заходят именно с этими вопросами.
+    el("div.note.note--ok.settings__note", {}, [
+      el("div", { text: "Кошелёк создан для тестирования нового протокола WalletTg." }),
+      el("div.note__more", {
+        text: "Данные зашифрованы (Argon2id + AES-GCM) и хранятся только на вашем устройстве.",
+      }),
+    ]),
+
     el("div.screen__spacer"),
 
     /*
