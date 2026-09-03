@@ -222,11 +222,27 @@ export function homeScreen(ctx) {
 
   /* ---- Токены и NFT ----------------------------------------------------- */
 
+  /** Строка-заглушка: держит высоту, пока список ещё не приехал. */
+  const skelRow = () =>
+    el("div.assets__list", {}, [
+      el("div.asset", {}, [el("span.asset__skel"), el("span.asset__skel.asset__skel--sm")]),
+    ]);
+
+  /*
+   * Молчание индексатора — не ошибка, а обычное дело: лимит у него общий
+   * на адрес, и в 429 попадают все, кто сидит за тем же выходом в сеть.
+   * Поэтому пока идут повторы, на месте списка стоит ожидание, и только
+   * после трёх отказов подряд мы говорим человеку прямо.
+   */
+  let assetFails = 0;
+
   const section = (title, items, empty, render) =>
     el("div.assets", {}, [
       el("div.assets__title", { text: title }),
       items === null
-        ? el("p.faint", { text: "Не удалось спросить индексатор." })
+        ? assetFails >= 3
+          ? el("p.faint", { text: "Индексатор не отвечает. Пробуем ещё." })
+          : skelRow()
         : items.length === 0
           ? el("p.faint", { text: empty })
           : el("div.assets__list", {}, items.map(render)),
@@ -293,15 +309,7 @@ export function homeScreen(ctx) {
   const skeleton = () =>
     assets.replaceChildren(
       ...["Токены", "NFT"].map((title) =>
-        el("div.assets", {}, [
-          el("div.assets__title", { text: title }),
-          el("div.assets__list", {}, [
-            el("div.asset", {}, [
-              el("span.asset__skel"),
-              el("span.asset__skel.asset__skel--sm"),
-            ]),
-          ]),
-        ]),
+        el("div.assets", {}, [el("div.assets__title", { text: title }), skelRow()]),
       ),
     );
 
@@ -405,7 +413,20 @@ export function homeScreen(ctx) {
   const pullAssets = async () => {
     if (busy || mode !== "ready") return;
     const got = await loadAssets();
-    if (got) paintAssets(got[0], got[1]);
+
+    if (!got || (got[0] === null && got[1] === null)) {
+      assetFails += 1;
+      // Ждать полминуты до следующей попытки незачем: отказ обычно разовый.
+      if (assetFails <= 4) setTimeout(() => screen.isConnected && pullAssets(), 9000);
+      if (painted === null || assetFails === 3) {
+        painted = null;
+        paintAssets(got?.[0] ?? null, got?.[1] ?? null);
+      }
+      return;
+    }
+
+    assetFails = 0;
+    paintAssets(got[0], got[1]);
   };
 
   /* ---- Деплой ------------------------------------------------------------ */

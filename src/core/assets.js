@@ -47,19 +47,27 @@ async function get(path, params, network = "mainnet") {
   const url = new URL(`${API[network] ?? API.mainnet}${path}`);
   for (const [k, v] of params) url.searchParams.append(k, v);
 
+  /*
+   * Пауза между попытками растёт. Публичный toncenter отвечает 429 не только
+   * на наши запросы: лимит общий на адрес, и в него попадают все, кто сидит
+   * за тем же выходом в сеть. Одной повторной попытки не хватало, и экран
+   * писал «не удалось спросить индексатор» там, где токены есть.
+   */
+  const BACKOFF = [1500, 3500, 7000];
+
   return queued(async () => {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    let last = null;
+    for (let attempt = 0; attempt <= BACKOFF.length; attempt++) {
       const res = await fetch(url, { headers: { Accept: "application/json" } });
       if (res.ok) return res.json();
-
-      // 429 — просто «частишь»: подождать и повторить дешевле, чем показать
-      // человеку пустой список там, где на самом деле есть токены.
-      if (res.status === 429 && attempt === 0) {
-        await new Promise((r) => setTimeout(r, 1600));
+      last = res.status;
+      if ((res.status === 429 || res.status >= 500) && attempt < BACKOFF.length) {
+        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
         continue;
       }
-      throw new Error(`Индексатор ответил ${res.status}`);
+      throw new Error(`Индексатор ответил ${last}`);
     }
+    throw new Error(`Индексатор ответил ${last}`);
   });
 }
 
@@ -126,9 +134,12 @@ export async function fetchNfts(address, network = "mainnet") {
     // У части коллекций индекс — 78-значное число: как имя оно бесполезно.
     const index = String(item.index ?? "");
     const short = index.length <= 12 ? `#${index}` : "NFT";
+    // У доменов имени нет вовсе: оно лежит отдельным полем, и без него
+    // домен показывался безликим «NFT».
+    const domain = info.extra?.domain || item.content?.domain;
     return {
       address: data.address_book?.[item.address]?.user_friendly ?? item.address,
-      name: info.name || short,
+      name: domain || info.name || item.content?.name || short,
       collection: collection.name || data.address_book?.[item.collection_address]?.user_friendly || "",
       scam: Boolean(info.is_scam || collection.is_scam),
     };
