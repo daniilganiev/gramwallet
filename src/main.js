@@ -221,17 +221,35 @@ function keepFocusVisible() {
      */
     const bottom = field.getBoundingClientRect().bottom + lifted;
     const limit = vv.offsetTop + vv.height - 14;
+    const need = Math.max(0, Math.round(bottom - limit));
 
-    lifted = Math.max(0, Math.round(bottom - limit));
+    // Мелкие поправки не отрабатываем: на них экран только дрожал бы.
+    if (Math.abs(need - lifted) < 4) return;
+
+    lifted = need;
     place(holder, lifted);
   };
 
-  vv.addEventListener("resize", adjust);
-  vv.addEventListener("scroll", adjust);
+  /*
+   * Считаем один раз — когда клавиатура доехала.
+   *
+   * Пока она едет, visualViewport шлёт resize десятками, и на каждом кадре
+   * видимая высота своя. Отрабатывая их по одному, экран гнался за
+   * клавиатурой: поднимался, промахивался, поправлялся — это и выглядело
+   * как дёрганье. Ждём, пока события утихнут, и двигаемся однажды.
+   */
+  let settle = null;
+  const later = () => {
+    clearTimeout(settle);
+    settle = setTimeout(adjust, 180);
+  };
+
+  vv.addEventListener("resize", later);
+  vv.addEventListener("scroll", later);
   // Фокус может перейти на соседнее поле, когда клавиатура уже стоит:
   // размер вьюпорта тогда не меняется, и события resize не будет.
-  document.addEventListener("focusin", () => setTimeout(adjust, 120));
-  document.addEventListener("focusout", () => setTimeout(adjust, 120));
+  document.addEventListener("focusin", later);
+  document.addEventListener("focusout", later);
 }
 
 function catchErrors() {

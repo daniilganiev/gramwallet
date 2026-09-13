@@ -24,10 +24,31 @@ export const isTelegram = Boolean(tg?.initData !== undefined && tg?.platform !==
  * поэтому пишем её и отсюда: лишняя запись того же значения ничего не стоит.
  */
 function trackViewport() {
+  let current = 0;
+
   const apply = () => {
     const h = tg?.viewportStableHeight;
-    if (h) document.documentElement.style.setProperty("--tg-viewport-stable-height", `${h}px`);
+    if (!h) return;
+
+    /*
+     * Уменьшение под клавиатурой не принимаем.
+     *
+     * «Устойчивой» высота считается по последнему установившемуся состоянию,
+     * и часть клиентов, когда клавиатура доехала, объявляет устойчивым уже
+     * уменьшенный экран. Стоит это принять — body сожмётся, обе распорки
+     * flex: 1 схлопнутся, и содержимое дёрнется прямо под пальцем. Никакой
+     * подъём такого не лечит: раскладка меняется под ним.
+     *
+     * Признак открытой клавиатуры — поле в фокусе. Как только фокус уйдёт,
+     * следующее же событие вернёт настоящую высоту.
+     */
+    const typing = document.activeElement?.matches?.("input, textarea");
+    if (typing && current && h < current) return;
+
+    current = h;
+    document.documentElement.style.setProperty("--tg-viewport-stable-height", `${h}px`);
   };
+
   apply();
   try {
     tg?.onEvent?.("viewportChanged", apply);

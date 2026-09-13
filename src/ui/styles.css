@@ -331,6 +331,11 @@ body {
  *
  * Фон, шторки и всплывающие подсказки лежат на body, а не внутри экрана,
  * поэтому transform их не двигает и не ломает им position: fixed.
+ *
+ * Своей анимации у подъёма нет намеренно. Пока она шла, getBoundingClientRect
+ * возвращал положение на полпути, а расчёт прибавлял к нему уже конечную
+ * величину — замер выходил завышенным, и подъём сам себя раскачивал. Двигаемся
+ * разом, ровно в тот момент, когда клавиатура уже встала.
  */
 .screen,
 .modal__sheet {
@@ -341,7 +346,6 @@ body {
    * с transform, а не спорит.
    */
   translate: 0 calc(-1 * var(--lift, 0px));
-  transition: translate 0.24s var(--ease);
 }
 
 /*
@@ -354,7 +358,6 @@ body {
 .screen > .screen__actions,
 .modal__sheet > .screen__actions {
   translate: 0 var(--lift, 0px);
-  transition: translate 0.24s var(--ease);
 }
 
 /* Содержательные блоки не сжимаются — распорки для этого и заведены. */
@@ -3642,6 +3645,12 @@ textarea.input {
  */
 .whatsnew-slot > .whatsnew {
   margin-left: auto;
+  /*
+   * Отходим от правого края: пятно свечения шире самой плашки примерно
+   * на полсотни пикселей в каждую сторону, и вплотную к краю его правая
+   * половина просто срезалась.
+   */
+  margin-right: var(--sp-3);
 }
 
 /*
@@ -3763,33 +3772,6 @@ textarea.input {
 @media (prefers-reduced-motion: reduce) {
   .whatsnew {
     animation: none;
-  }
-}
-
-/* Заглушка списков: держит высоту, пока индексатор ещё не ответил. */
-.asset__skel {
-  display: inline-block;
-  width: 84px;
-  height: 13px;
-  border-radius: 12px;
-  background: linear-gradient(
-    100deg,
-    rgba(255, 255, 255, 0.05) 22%,
-    rgba(190, 220, 255, 0.18) 44%,
-    rgba(255, 255, 255, 0.05) 66%
-  );
-  background-size: 280% 100%;
-  animation: balance-wait 1.6s linear infinite;
-}
-
-.asset__skel--sm {
-  width: 46px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .asset__skel {
-    animation: none;
-    background: rgba(255, 255, 255, 0.08);
   }
 }
 

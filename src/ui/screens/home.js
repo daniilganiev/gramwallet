@@ -297,12 +297,6 @@ export function homeScreen(ctx) {
 
   /* ---- Токены и NFT ----------------------------------------------------- */
 
-  /** Строка-заглушка: держит высоту, пока список ещё не приехал. */
-  const skelRow = () =>
-    el("div.assets__list", {}, [
-      el("div.asset", {}, [el("span.asset__skel"), el("span.asset__skel.asset__skel--sm")]),
-    ]);
-
   /*
    * Молчание индексатора — не ошибка, а обычное дело: лимит у него общий
    * на адрес, и в 429 попадают все, кто сидит за тем же выходом в сеть.
@@ -311,17 +305,20 @@ export function homeScreen(ctx) {
    */
   let assetFails = 0;
 
-  const section = (title, items, empty, render) =>
-    el("div.assets", {}, [
-      el("div.assets__title", { text: title }),
-      items === null
-        ? assetFails >= 3
-          ? el("p.faint", { text: "Индексатор не отвечает. Пробуем ещё." })
-          : skelRow()
-        : items.length === 0
-          ? el("p.faint", { text: empty })
-          : el("div.assets__list", {}, items.map(render)),
-    ]);
+  /**
+   * Секция списка.
+   *
+   * Пустой её не бывает: ни заголовка, ни подписи «пока пусто» на экране нет,
+   * пока нет самих предметов. Сообщать человеку об отсутствии того, о чём он
+   * не спрашивал, незачем — списки просто появляются, когда появляются.
+   */
+  const section = (title, items, render) =>
+    items?.length
+      ? el("div.assets", {}, [
+          el("div.assets__title", { text: title }),
+          el("div.assets__list", {}, items.map(render)),
+        ])
+      : null;
 
   /** Отпечаток списков: пока он тот же, разметку не трогаем вообще. */
   const stamp = (jettons, nfts) =>
@@ -345,8 +342,8 @@ export function homeScreen(ctx) {
     const first = painted === null;
     painted = next;
 
-    assets.replaceChildren(
-      section("Токены", jettons, "Пока пусто.", (j) =>
+    const blocks = [
+      section("Токены", jettons, (j) =>
         el("div.asset", {}, [
           el("span.asset__name", { text: j.symbol }),
           el("span.asset__value", { text: j.amount }),
@@ -354,7 +351,7 @@ export function homeScreen(ctx) {
       ),
       // Нажатие по предмету ведёт сразу на его отправку: карточки NFT
       // у нас нет, а это единственное, что с ним тут можно сделать.
-      section("NFT", nfts, "Пока пусто.", (n) =>
+      section("NFT", nfts, (n) =>
         el("div.asset.asset--tap", {
           onclick: () => {
             haptic("light");
@@ -367,10 +364,21 @@ export function homeScreen(ctx) {
           el("span.asset__go", { text: "›" }),
         ]),
       ),
-    );
+    ].filter(Boolean);
+
+    /*
+     * Молчание индексатора — другое дело: списки могут быть и не пусты,
+     * просто мы их не получили. Об этом говорим, но одной строкой на оба,
+     * а не двумя пустыми секциями.
+     */
+    if (!blocks.length && jettons === null && nfts === null && assetFails >= 3) {
+      blocks.push(el("p.faint", { text: "Индексатор не отвечает. Пробуем ещё." }));
+    }
+
+    assets.replaceChildren(...blocks);
     // Мягко проявляется только первый показ за сеанс. Возврат с другого экрана
     // рисует списки из памяти сразу — мигать там нечему.
-    assets.classList.toggle("home__in", first && !fromCache);
+    assets.classList.toggle("home__in", first && !fromCache && blocks.length > 0);
   };
 
   /*
@@ -393,20 +401,8 @@ export function homeScreen(ctx) {
     return [jettons, nfts];
   };
 
-  /**
-   * Пока о токенах ничего не известно, на их месте стоят те же две секции
-   * с полосой ожидания. Блоки не должны появляться и пропадать: кнопки под
-   * ними прыгали бы по экрану на каждом заходе.
-   */
-  const skeleton = () =>
-    assets.replaceChildren(
-      ...["Токены", "NFT"].map((title) =>
-        el("div.assets", {}, [el("div.assets__title", { text: title }), skelRow()]),
-      ),
-    );
-
+  // Пока списки не приехали, места под них не занимаем: появятся — появятся.
   if (seen.jettons !== null || seen.nfts !== null) paintAssets(seen.jettons, seen.nfts, true);
-  else skeleton();
 
   /* ---- Состояние кошелька ------------------------------------------------ */
 
