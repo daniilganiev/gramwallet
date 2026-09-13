@@ -1,8 +1,11 @@
 import { mnemonicNew, mnemonicToPrivateKey } from "@ton/crypto";
 
+import { fromNano } from "@ton/core";
+
 import { el, copyText } from "../dom.js";
 import { linkButton, primaryButton, runAction, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
+import { COIN } from "../../core/constants.js";
 import { replaceMnemonic } from "../../crypto/vault.js";
 import { TgWallet } from "../../core/wallet.js";
 import { requirePin } from "./lock.js";
@@ -35,6 +38,26 @@ export function rotateScreen(ctx) {
   let stage = "warn";
   let mnemonic = null;
 
+  /*
+   * Цена вопроса до того, как человек решится.
+   *
+   * Смена ключа стоит копейки, но «копейки» — не число, и на экране, где всё
+   * остальное написано про необратимость, отсутствие цены читается как
+   * умолчание. Спрашиваем ноду по тому же запросу, который потом и уйдёт;
+   * узел один и тот же экран переживает, поэтому считаем один раз.
+   */
+  const feeLine = el("p.screen__hint", { text: "Считаем комиссию сети…" });
+
+  ctx.wallet
+    .estimateKeyChangeFee()
+    .then((fee) => {
+      feeLine.textContent = `Сетевая комиссия за смену — около ${fromNano(fee)} ${COIN}.`;
+    })
+    .catch(() => {
+      // Нода не ответила: порядок цены известен и без неё, врать не приходится.
+      feeLine.textContent = `Сетевая комиссия за смену — около 0.00004 ${COIN}.`;
+    });
+
   const render = () => {
     screen.replaceChildren(...({ warn, phrase }[stage]()));
     screen.scrollTop = 0;
@@ -55,6 +78,8 @@ export function rotateScreen(ctx) {
     el("p.screen__hint", {
       text: "Новую фразу сохраните вместе с адресом: после смены адрес из фразы уже не выводится.",
     }),
+
+    feeLine,
 
     // Утка занимает пустоту между предупреждением и кнопкой: экран с одними
     // запретами читается тяжело, а тут решение принимают спокойно.

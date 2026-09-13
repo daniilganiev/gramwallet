@@ -871,6 +871,18 @@ textarea.input {
   color: var(--danger);
 }
 
+/* Куда разрешился домен. Строка живёт под полем адреса. */
+.resolved {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+
+.resolved--bad {
+  color: #c62828;
+}
+
 /* --- Мелочи ------------------------------------------------------------- */
 
 .pill {
@@ -2403,6 +2415,39 @@ textarea.input {
 
 .address__actions {
   margin-top: var(--sp-3);
+}
+
+/* Лист пополнения: код, адрес под ним и пояснение. */
+.receive {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.receive__code {
+  display: flex;
+  padding: 12px;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.receive__code svg {
+  display: block;
+  width: min(232px, 62vw);
+  height: auto;
+}
+
+.receive__addr {
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+  user-select: all;
 }
 
 /* --- Главный экран ------------------------------------------------------- */

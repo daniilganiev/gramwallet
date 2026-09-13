@@ -134,6 +134,47 @@ async function get(path, params, network = "mainnet", opts = {}) {
   throw new Error(`Индексатор ответил ${last}`);
 }
 
+/**
+ * Имя в сети TON: name.ton или name.t.me.
+ *
+ * Домен — это NFT, в котором владелец держит запись «кошелёк». Своего
+ * резолвера у нас нет, за адресом ходим к индексатору: он и так единственный
+ * разрешённый политикой безопасности источник.
+ *
+ * Регистр важен. Toncenter отвечает пустым списком на GrandFatherTon.ton
+ * и находит grandfatherton.ton, так что приводим имя к нижнему сами —
+ * человек не обязан об этом знать.
+ *
+ * @username в Telegram — это домен в зоне t.me, принимаем и такую запись.
+ *
+ * Возвращает готовое имя либо null, если на домен это не похоже вовсе.
+ */
+export function toDomain(text) {
+  let name = String(text ?? "").trim().toLowerCase();
+  if (!name) return null;
+  if (name.startsWith("@")) name = `${name.slice(1)}.t.me`;
+  return /^[a-z0-9][a-z0-9_-]*\.(?:ton|t\.me)$/.test(name) ? name : null;
+}
+
+/**
+ * Адрес, на который указывает домен.
+ *
+ * Возвращает { domain, address } либо null, если имя никуда не ведёт: на
+ * несуществующий домен индексатор отвечает не ошибкой, а пустым списком
+ * записей, и путать это с обрывом связи нельзя — сообщения человеку разные.
+ * Сбой сети проходит исключением наружу.
+ */
+export async function resolveDomain(name, network = "mainnet", opts = {}) {
+  const domain = toDomain(name);
+  if (!domain) return null;
+
+  const data = await get("/dns/records", [["domain", domain]], network, opts);
+  const raw = (data.records ?? [])[0]?.dns_wallet;
+  if (!raw) return null;
+
+  return { domain, address: data.address_book?.[raw]?.user_friendly ?? raw };
+}
+
 /** Хеш транзакции в том виде, в каком его понимают обозреватели. */
 export const hashToHex = (b64) => {
   try {
@@ -331,6 +372,24 @@ export async function fetchHistory(address, network = "mainnet", limit = 100, op
       return a;
     }
   };
+  /*
+   * Домен второй стороны индексатор присылает вместе с ответом, в том же
+   * справочнике адресов. Отдельного запроса это не стоит, а «grandfatherton.ton»
+   * в списке операций читается несравнимо лучше, чем UQAK…EnEWd.
+   */
+  const named = (a) => (a ? (data.address_book?.[a]?.domain ?? null) : null);
+
+  /*
+   * Перевод самому себе.
+   *
+   * В блокчейне это одно действие, а не два: отправитель и получатель
+   * совпадают, индексатор присылает одну запись, и обозреватели показывают
+   * одну. Рисовать две строки значило бы выдумать событие. Но и «Отправлено»
+   * со своим же адресом в графе «кому» — неправда, поэтому у такой операции
+   * своя подпись и нет контрагента.
+   */
+  const toSelf = (from, to) => isMine(from) && isMine(to);
+
   const token = (a) => data.metadata?.[a]?.token_info?.[0] ?? {};
 
   const rows = (data.actions ?? []).map((act) => {
@@ -344,26 +403,44 @@ export async function fetchHistory(address, network = "mainnet", limit = 100, op
     };
 
     if (act.type === "ton_transfer") {
+      if (toSelf(d.source, d.destination)) {
+        return { ...row, kind: "self", title: "Себе", amount: fmtUnits(d.value, 9),
+          unit: "GRAM", peer: null, peerName: null };
+      }
       const out = isMine(d.source);
+      const side = out ? d.destination : d.source;
       return { ...row, kind: out ? "out" : "in", title: out ? "Отправлено" : "Получено",
-        amount: fmtUnits(d.value, 9), unit: "GRAM", peer: friendly(out ? d.destination : d.source) };
+        amount: fmtUnits(d.value, 9), unit: "GRAM", peer: friendly(side), peerName: named(side) };
     }
 
     if (act.type === "jetton_transfer") {
+      const info0 = token(d.asset);
+      if (toSelf(d.sender, d.receiver)) {
+        return { ...row, kind: "self", title: "Токен себе",
+          amount: fmtUnits(d.amount, info0.extra?.decimals ?? info0.decimals ?? 9),
+          unit: info0.symbol || "токен", peer: null, peerName: null };
+      }
       const out = isMine(d.sender);
       const info = token(d.asset);
+      const side = out ? d.receiver : d.sender;
       return { ...row, kind: out ? "out" : "in", title: out ? "Отправлен токен" : "Получен токен",
         amount: fmtUnits(d.amount, info.extra?.decimals ?? info.decimals ?? 9),
-        unit: info.symbol || "токен", peer: friendly(out ? d.receiver : d.sender) };
+        unit: info.symbol || "токен", peer: friendly(side), peerName: named(side) };
     }
 
     if (act.type === "nft_transfer") {
+      if (toSelf(d.old_owner, d.new_owner)) {
+        const self = token(d.nft_item);
+        return { ...row, kind: "self", title: "NFT себе",
+          amount: self.name || "NFT", unit: "", peer: null, peerName: null };
+      }
       const out = isMine(d.old_owner);
       const item = token(d.nft_item);
       const collection = token(d.nft_collection);
+      const side = out ? d.new_owner : d.old_owner;
       return { ...row, kind: out ? "out" : "in", title: out ? "Отправлен NFT" : "Получен NFT",
         amount: item.name || collection.name || "NFT", unit: "",
-        peer: friendly(out ? d.new_owner : d.old_owner) };
+        peer: friendly(side), peerName: named(side) };
     }
 
     if (act.type === "contract_deploy") {

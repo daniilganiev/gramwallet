@@ -1,7 +1,7 @@
 import { fromNano, toNano } from "@ton/core";
 
-import { el, copyText } from "../dom.js";
-import { copyButton, diamond, glassButton, linkButton, primaryButton, runAction, sheet, terminal, toast } from "../components.js";
+import { el, copyText, fmtCoins } from "../dom.js";
+import { copyButton, diamond, glassButton, linkButton, primaryButton, qrButton, qrCode, runAction, sheet, terminal, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { COIN, MIN_DEPLOY_BALANCE } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
@@ -75,6 +75,36 @@ export function homeScreen(ctx) {
     toast(ok ? "Адрес скопирован" : "Не удалось скопировать", { error: !ok });
     return ok;
   };
+
+  /*
+   * Пополнение.
+   *
+   * В коде лежит ton://transfer, а не голый адрес: кошелёк, который его
+   * отсканирует, сразу откроет отправку на этот адрес, вместо того чтобы
+   * показать человеку строку и предложить разбираться самому.
+   */
+  const showReceive = async () => {
+    haptic("light");
+    const ok = await sheet({
+      title: "Пополнение",
+      body: el("div.receive", {}, [
+        el("div.receive__code", {}, [qrCode(`ton://transfer/${addressText}`)]),
+        el("p.receive__addr", { text: addressText }),
+        el("p.faint", {
+          text: "Отсканируйте код другим кошельком — он откроет отправку на этот адрес. Сеть — TON.",
+        }),
+      ]),
+      confirmText: "Скопировать адрес",
+      cancelText: "Закрыть",
+    });
+    if (ok) await copy();
+  };
+
+  const qr = qrButton("Показать QR для пополнения", (e) => {
+    // Нажатие по самой карточке копирует адрес — кнопке это ни к чему.
+    e.stopPropagation();
+    showReceive();
+  });
 
   const balanceValue = el("span.balance__value");
 
@@ -164,6 +194,7 @@ export function homeScreen(ctx) {
         el("div", { text: addressText.slice(0, 24) }),
         el("div", { text: addressText.slice(24) }),
       ]),
+      qr,
       copyBtn.node,
     ]),
 
@@ -414,9 +445,23 @@ export function homeScreen(ctx) {
     if (busy) return;
     try {
       const state = await wallet.getState();
+      const before = seen.balance;
       seen.balance = state.balance ?? 0n;
       seen.deployed = state.state === "active";
       showBalance(seen.balance);
+
+      /*
+       * О приходе говорим вслух.
+       *
+       * Это единственное уведомление, которое возможно без сервера: пуш
+       * потребовал бы бэкенда, а сообщение от бота — его токена в бандле,
+       * то есть отданного кому угодно бота. Пока приложение открыто, баланс
+       * и так опрашивается, так что разница с прошлым кругом достаётся даром.
+       */
+      if (before !== null && seen.balance > before) {
+        haptic("success");
+        toast(`Пришло ${fmtCoins(seen.balance - before)}`);
+      }
       if (seen.deployed) showReady();
       else showTopUp();
     } catch (e) {

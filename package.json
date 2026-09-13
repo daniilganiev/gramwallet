@@ -8,14 +8,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/encoding.test.js && node test/rotation.test.js && node test/vault.test.js && node test/queue.test.js && node test/amounts.test.js"
+    "test": "node test/encoding.test.js && node test/rotation.test.js && node test/vault.test.js && node test/queue.test.js && node test/amounts.test.js && node test/domains.test.js"
   },
   "dependencies": {
     "@orbs-network/ton-access": "^2.3.3",
     "@ton/core": "^0.63.1",
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^16.3.0",
-    "hash-wasm": "^4.12.0"
+    "hash-wasm": "^4.12.0",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "vite": "^8.2.2",

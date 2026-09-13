@@ -88,7 +88,9 @@ export function historyScreen(ctx) {
               ? el("button.op__peer", {
                   type: "button",
                   title: "Скопировать адрес",
-                  text: `${r.kind === "out" ? "кому" : "от"} ${shortAddress(r.peer, 6, 6)}`,
+                  // Показываем домен, если он есть, а копируем всё равно адрес:
+                  // он однозначен и понятен любому обозревателю.
+                  text: `${r.kind === "out" ? "кому" : "от"} ${r.peerName ?? shortAddress(r.peer, 6, 6)}`,
                   onclick: async () => {
                     const ok = await copyText(r.peer);
                     haptic(ok ? "light" : "error");

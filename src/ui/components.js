@@ -1,5 +1,9 @@
+import qrcode from "qrcode-generator";
+
 import { el } from "./dom.js";
 import { haptic, openLink } from "../telegram.js";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 let toastTimer = null;
 
@@ -382,6 +386,14 @@ const ICON_COPY =
   '<rect x="9" y="9" width="11" height="11" rx="3.2"/>' +
   '<path d="M15.5 5.5A2.5 2.5 0 0 0 13 3H7a4 4 0 0 0-4 4v6a2.5 2.5 0 0 0 2.5 2.5"/></svg>';
 
+const ICON_QR =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.6"/>' +
+  '<rect x="14" y="3.5" width="6.5" height="6.5" rx="1.6"/>' +
+  '<rect x="3.5" y="14" width="6.5" height="6.5" rx="1.6"/>' +
+  '<path d="M14 14h2.5v2.5H14zM18 18h2.5v2.5H18zM14 20.5h2.5M20.5 14v2.5"/></svg>';
+
 const ICON_DONE =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
   'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -420,12 +432,6 @@ export function copyButton(title, onclick) {
   return { node, run };
 }
 
-/**
- * Поле PIN вместе с подписью и счётчиком набранного.
- *
- * Шесть точек под полем показывают, сколько символов уже введено и сколько
- * осталось: звёздочки в поле идут вплотную, и на глаз их не сосчитать.
- */
 /**
  * Поле PIN: шесть ячеек, которые и есть поле.
  *
@@ -535,6 +541,67 @@ export function pinField(labelText = "PIN", { onFull = null } = {}) {
   };
 
   return { field, input, fail, busy };
+}
+
+/** Кнопка того же вида, что и «скопировать»: они стоят рядом. */
+export function qrButton(title, onclick) {
+  return el("button.btn-copy", {
+    type: "button",
+    title,
+    "aria-label": title,
+    html: ICON_QR,
+    onclick,
+  });
+}
+
+/**
+ * QR-код как SVG.
+ *
+ * Вектор, а не canvas: код состоит из квадратов, и на любом экране он обязан
+ * остаться с резкими краями — растянутый растр сканируется заметно хуже.
+ * Все модули идут одним path: их за тысячу, и отдельными прямоугольниками
+ * разметка распухает на ровном месте.
+ *
+ * Уровень коррекции M — середина: держит блики и отпечатки на стекле, но не
+ * раздувает рисунок так, как H, отчего модули на телефоне мельчают.
+ *
+ * Цвета заданы явно и не берутся из темы: QR читается сканером по контрасту,
+ * и «тёмный на светлом» здесь не оформление, а условие работы.
+ */
+export function qrCode(text, { size = 232, margin = 3 } = {}) {
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+
+  const count = qr.getModuleCount();
+  const side = count + margin * 2;
+
+  let d = "";
+  for (let row = 0; row < count; row++) {
+    for (let col = 0; col < count; col++) {
+      if (qr.isDark(row, col)) d += `M${col + margin} ${row + margin}h1v1h-1z`;
+    }
+  }
+
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${side} ${side}`);
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "QR-код для пополнения кошелька");
+
+  const bg = document.createElementNS(SVG_NS, "rect");
+  bg.setAttribute("width", String(side));
+  bg.setAttribute("height", String(side));
+  bg.setAttribute("fill", "#ffffff");
+
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", d);
+  path.setAttribute("fill", "#0b0d10");
+  path.setAttribute("shape-rendering", "crispEdges");
+
+  svg.append(bg, path);
+  return svg;
 }
 
 /** Значок GitHub — восьмёрка кота-осьминога, официальный контур марки. */

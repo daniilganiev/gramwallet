@@ -4,7 +4,7 @@
  */
 
 import { Address, Cell, beginCell, contractAddress, external, storeMessage } from "@ton/core";
-import { mnemonicToPrivateKey, signVerify } from "@ton/crypto";
+import { keyPairFromSeed, mnemonicToPrivateKey, signVerify } from "@ton/crypto";
 
 import {
   DEFAULT_TTL_SECONDS,
@@ -239,6 +239,43 @@ export class TgWallet {
         body,
         initCode: init?.code ?? null,
         initData: init?.data ?? null,
+        ignoreSignature: false,
+      }),
+    );
+
+    const f = res.source_fees ?? {};
+    return BigInt(
+      Math.ceil((f.in_fwd_fee ?? 0) + (f.storage_fee ?? 0) + (f.gas_fee ?? 0) + (f.fwd_fee ?? 0)),
+    );
+  }
+
+  /**
+   * Сколько сеть возьмёт за смену ключа.
+   *
+   * Считает нода по тому же запросу, который потом и уйдёт. Ключ для пробы
+   * берём случайный и тут же забываем: цену определяет размер сообщения,
+   * а он у всех ключей одинаковый — 256 бит есть 256 бит. Трогать настоящий
+   * новый ключ ради оценки незачем, его на этом шаге ещё и нет.
+   */
+  async estimateKeyChangeFee({ ttl = DEFAULT_TTL_SECONDS } = {}) {
+    const probe = keyPairFromSeed(Buffer.from(crypto.getRandomValues(new Uint8Array(32))));
+    const proof = buildKeyRotationProof(this.address, probe.secretKey);
+    const seqno = await this.getSeqno();
+
+    const request = buildChangeKeyRequest({
+      newPublicKey: probe.publicKey,
+      rotationSignature: proof.signature,
+      subwalletId: this.subwalletId,
+      seqno,
+      validUntil: Math.floor(Date.now() / 1000) + ttl,
+      isExternal: true,
+    });
+
+    const res = await this.providers.call((c) =>
+      c.estimateExternalMessageFee(this.address, {
+        body: signRequest(request, this.keyPair.secretKey),
+        initCode: null,
+        initData: null,
         ignoreSignature: false,
       }),
     );

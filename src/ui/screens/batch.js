@@ -1,10 +1,12 @@
 import { Address, fromNano, toNano } from "@ton/core";
 
-import { el, fmtCoins } from "../dom.js";
+import { el, fmtCoins, fromUnits, toUnits } from "../dom.js";
 import { amountInput, glassButton, linkButton, runAction, sheet, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { COIN } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
+import { fetchJettons, resolveDomain, toDomain } from "../../core/assets.js";
+import { JETTON_ATTACH, jettonTransferBody } from "../../core/transfers.js";
 
 /**
  * Запас, который остаётся на кошельке сверх сумм и комиссии: оценка
@@ -61,6 +63,17 @@ export function batchScreen(ctx) {
   const wallet = ctx.wallet;
   let balance = null;
 
+  /*
+   * Чем платим.
+   *
+   * GRAM уходит прямо получателю, токен — командой твоему жетон-кошельку,
+   * по одной на каждого. Для контракта это те же 255 сообщений в одном
+   * подписанном запросе, разница только в теле и в том, что к каждому
+   * сообщению придётся приложить GRAM на газ.
+   */
+  let asset = { id: "coin", kind: "coin", symbol: COIN, decimals: 9 };
+
+  const picker = el("div.assets-pick");
   const rows = el("div.batch__rows");
   const summary = el("div.batch__total");
   const balanceLine = el("p.faint", { text: "Проверяем баланс…" });
@@ -79,8 +92,14 @@ export function batchScreen(ctx) {
       spellcheck: false,
       value: to,
     });
-    // Пакетом уходит только GRAM, поэтому точность всегда девять знаков.
-    const value = amountInput({ class: "batch__amount", placeholder: "0.1", value: amount });
+    // Точность у выбранной монеты своя: у GRAM девять знаков, у USD₮ шесть.
+    // Читается при каждом наборе, поэтому смена монеты доходит и до старых строк.
+    const value = amountInput({
+      class: "batch__amount",
+      placeholder: "0.1",
+      value: amount,
+      decimals: () => asset.decimals,
+    });
 
     const row = el("div.batch__row", {}, [
       address,
@@ -123,8 +142,10 @@ export function batchScreen(ctx) {
 
     for (const { to, raw } of items) {
       try {
-        Address.parse(to);
-        const v = toNano(raw);
+        // Домен проверить локально нельзя, но отличить его от мусора можно:
+        // ругаться на живое имя красным было бы неправдой.
+        if (!toDomain(to)) Address.parse(to);
+        const v = toUnits(raw, asset.decimals);
         if (v <= 0n) throw new Error("ноль");
         total += v;
       } catch {
@@ -133,11 +154,57 @@ export function batchScreen(ctx) {
     }
 
     const parts = [`Получателей: ${items.length}`];
-    if (total > 0n) parts.push(`всего ${fromNano(total)} ${COIN}`);
+    if (total > 0n) parts.push(`всего ${fromUnits(total, asset.decimals)} ${asset.symbol}`);
+    // Газ на жетоны — не мелочь: на сотне получателей это пять GRAM.
+    if (asset.kind === "jetton" && items.length) {
+      parts.push(`газ ≈ ${fromNano(toNano(JETTON_ATTACH) * BigInt(items.length))} ${COIN}`);
+    }
     if (broken) parts.push(`с ошибкой: ${broken}`);
     summary.textContent = items.length ? parts.join(" · ") : "Заполните хотя бы одну строку.";
     summary.classList.toggle("batch__total--bad", broken > 0);
   }
+
+  /*
+   * Список монет. NFT сюда не попадают: каждый предмет уникален, и «послать
+   * один NFT сразу всем» не значит ничего.
+   */
+  const chip = (id, label, data) =>
+    el("button.chip", {
+      type: "button",
+      text: label,
+      "data-id": id,
+      onclick: () => {
+        asset = { id, ...data };
+        showAsset();
+        recount();
+      },
+    });
+
+  const showAsset = () => {
+    for (const node of picker.children) {
+      node.classList.toggle("chip--on", node.dataset.id === asset.id);
+    }
+    balanceLine.textContent =
+      asset.kind === "coin"
+        ? balance === null
+          ? "Проверяем баланс…"
+          : `Доступно ${fmtCoins(balance)}`
+        : `Доступно ${asset.amount} ${asset.symbol}`;
+  };
+
+  picker.append(chip("coin", COIN, { kind: "coin", symbol: COIN, decimals: 9 }));
+
+  fetchJettons(wallet.address.toString({ bounceable: false }), wallet.network)
+    .then((list) => {
+      for (const j of list) {
+        if (j.scam) continue;
+        picker.append(chip(j.jetton, j.symbol, { kind: "jetton", ...j }));
+      }
+      showAsset();
+    })
+    .catch(() => {
+      // Индексатор промолчал — остаёмся с одним GRAM, это не повод падать.
+    });
 
   /**
    * Вставка списком — единственный вменяемый способ задать много адресов.
@@ -212,32 +279,88 @@ export function batchScreen(ctx) {
             return toast(`Больше ${MAX} получателей контракт не примет`, { error: true });
           }
 
+          /*
+           * Домены разрешаем до всего остального и по одному разу на имя.
+           *
+           * Индексатор пускает около запроса в секунду, поэтому список из
+           * сотни имён — это минуты ожидания. Повторы в списке встречаются
+           * часто (одному человеку несколько выплат), и считать их заново
+           * незачем.
+           */
+          const names = [...new Set(items.map((it) => toDomain(it.to)).filter(Boolean))];
+          const found = new Map();
+          for (const [n, name] of names.entries()) {
+            send.replaceChildren(
+              el("span.spinner"),
+              el("span", { text: `Ищем домены: ${n + 1} из ${names.length}` }),
+            );
+            let hit;
+            try {
+              hit = await resolveDomain(name, wallet.network);
+            } catch (e) {
+              haptic("error");
+              return toast(`${name}: ${explainError(e)}`, { error: true });
+            }
+            if (!hit) {
+              haptic("error");
+              return toast(`${name} ни на что не указывает`, { error: true });
+            }
+            found.set(name, hit.address);
+          }
+
           const messages = [];
           let total = 0n;
           for (const [i, { to, raw }] of items.entries()) {
+            const name = toDomain(to);
             let dest;
             try {
-              dest = Address.parse(to);
+              dest = Address.parse(name ? found.get(name) : to);
             } catch {
               haptic("error");
               return toast(`Строка ${i + 1}: адрес не похож на адрес TON`, { error: true });
             }
             let value;
             try {
-              value = toNano(raw);
-            } catch {
+              value = toUnits(raw, asset.decimals);
+            } catch (e) {
               haptic("error");
-              return toast(`Строка ${i + 1}: некорректная сумма`, { error: true });
+              return toast(`Строка ${i + 1}: ${e.message}`, { error: true });
             }
             if (value <= 0n) {
               haptic("error");
               return toast(`Строка ${i + 1}: сумма должна быть больше нуля`, { error: true });
             }
             total += value;
-            messages.push({ to: dest, amount: raw });
+
+            messages.push(
+              asset.kind === "coin"
+                ? { to: dest, amount: raw }
+                : {
+                    // Токеном распоряжается не получатель, а твой собственный
+                    // жетон-кошелёк: команда идёт ему, а он уже шлёт дальше.
+                    to: asset.wallet,
+                    amount: JETTON_ATTACH,
+                    bounce: true,
+                    body: jettonTransferBody({
+                      amount: value,
+                      to: dest,
+                      responseTo: wallet.address,
+                    }),
+                  },
+            );
           }
 
-          if (balance !== null && total >= balance) {
+          /** Сколько GRAM уйдёт на газ: у жетонов он свой на каждое сообщение. */
+          const gas = asset.kind === "coin" ? 0n : toNano(JETTON_ATTACH) * BigInt(messages.length);
+
+          if (asset.kind === "jetton" && total > BigInt(asset.raw)) {
+            haptic("error");
+            return toast(`Токена столько нет: доступно ${asset.amount} ${asset.symbol}`, {
+              error: true,
+            });
+          }
+
+          if (asset.kind === "coin" && balance !== null && total >= balance) {
             haptic("error");
             return toast("На балансе столько нет — нужно оставить и на комиссию", { error: true });
           }
@@ -257,10 +380,14 @@ export function batchScreen(ctx) {
            * хватать, оставшиеся переводы будут молча пропущены, а транзакция
            * всё равно окажется успешной.
            */
-          if (fee !== null && balance !== null && total + fee + RESERVE > balance) {
+          // Для GRAM в баланс обязаны поместиться сами суммы, для токена —
+          // газ на все сообщения. И то и другое сверх комиссии запроса.
+          const needed = (asset.kind === "coin" ? total : gas) + (fee ?? 0n) + RESERVE;
+          if (fee !== null && balance !== null && needed > balance) {
             haptic("error");
             return toast(
-              `Не хватает ${fromNano(total + fee + RESERVE - balance)} ${COIN} на суммы вместе с комиссией.`,
+              `Не хватает ${fromNano(needed - balance)} ${COIN}: ` +
+                (asset.kind === "coin" ? "на суммы вместе с комиссией." : "на газ вместе с комиссией."),
               { error: true },
             );
           }
@@ -272,9 +399,14 @@ export function batchScreen(ctx) {
             title: "Проверьте пакет",
             body: el("div", {}, [
               line("Получателей", String(messages.length)),
-              line("Всего", `${fromNano(total)} ${COIN}`),
+              line("Всего", `${fromUnits(total, asset.decimals)} ${asset.symbol}`),
+              gas > 0n && line("Газ на переводы", `${fromNano(gas)} ${COIN}`),
               line("Комиссия сети", fee === null ? "не удалось оценить" : `≈ ${fromNano(fee)} ${COIN}`),
               el("p.faint", { text: "Одна подпись и одна комиссия сети на всех получателей." }),
+              gas > 0n &&
+                el("p.faint", {
+                  text: "Газ идёт по цепочке контрактов токена, по одной порции на получателя. Неизрасходованное вернётся на кошелёк.",
+                }),
             ]),
             confirmText: "Отправить",
           });
@@ -306,7 +438,9 @@ export function batchScreen(ctx) {
     .getBalance()
     .then((b) => {
       balance = b;
-      balanceLine.textContent = `Доступно ${fmtCoins(b)}`;
+      // Строку пишет showAsset: при выбранном токене доступен он,
+      // а не GRAM, и перетирать её балансом монеты нельзя.
+      showAsset();
     })
     .catch(() => {
       balanceLine.textContent = "Не удалось получить баланс";
@@ -316,6 +450,7 @@ export function batchScreen(ctx) {
 
   return el("div.screen.stack.batch", {}, [
     el("h1.glow", { "data-t": "Пакетная отправка", text: "Пакетная отправка" }),
+    picker,
     el("p.lead", { text: `Одна подпись и одна комиссия сети — до ${MAX} получателей.` }),
     balanceLine,
 

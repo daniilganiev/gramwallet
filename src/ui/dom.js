@@ -40,6 +40,29 @@ export function fmtCoins(nano, { withCoin = true } = {}) {
   return withCoin ? `${trimmed} ${COIN}` : trimmed;
 }
 
+/**
+ * Строка суммы в наименьшие единицы токена.
+ *
+ * У GRAM их девять знаков, у USD₮ шесть — точность у каждого своя, и лишний
+ * знак это не округление, а другая сумма. Поэтому не режем молча, а говорим.
+ */
+export function toUnits(text, decimals) {
+  const [whole, frac = ""] = String(text).replace(",", ".").split(".");
+  if (frac.length > decimals) {
+    throw new Error(`Слишком много знаков после точки: не больше ${decimals}.`);
+  }
+  const tail = (frac + "0".repeat(decimals)).slice(0, decimals);
+  return BigInt(whole || "0") * 10n ** BigInt(decimals) + BigInt(tail || "0");
+}
+
+/** Обратное к toUnits: сумма в наименьших единицах — в читаемый вид. */
+export function fromUnits(units, decimals) {
+  const s = String(units ?? "0").padStart(decimals + 1, "0");
+  const whole = s.slice(0, s.length - decimals) || "0";
+  const frac = decimals ? s.slice(s.length - decimals).replace(/0+$/, "") : "";
+  return frac ? `${whole}.${frac}` : whole;
+}
+
 export function shortAddress(address, head = 6, tail = 6) {
   const s = typeof address === "string" ? address : address.toString({ bounceable: true });
   return s.length > head + tail + 3 ? `${s.slice(0, head)}…${s.slice(-tail)}` : s;

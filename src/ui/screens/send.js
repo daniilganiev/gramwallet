@@ -1,11 +1,11 @@
 import { Address, fromNano, toNano } from "@ton/core";
 
-import { el, fmtCoins, shortAddress } from "../dom.js";
+import { el, fmtCoins, shortAddress, toUnits } from "../dom.js";
 import { amountInput, linkButton, runAction, sheet, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { COIN } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
-import { fetchJettons } from "../../core/assets.js";
+import { fetchJettons, resolveDomain, toDomain } from "../../core/assets.js";
 import { JETTON_ATTACH, NFT_ATTACH, jettonTransferBody, nftTransferBody } from "../../core/transfers.js";
 
 /**
@@ -15,15 +15,6 @@ import { JETTON_ATTACH, NFT_ATTACH, jettonTransferBody, nftTransferBody } from "
 const RESERVE = toNano("0.001");
 
 /** Сумма в наименьших единицах токена: «0.03» при decimals 6 → 30000n. */
-function toUnits(text, decimals) {
-  const [whole, frac = ""] = String(text).replace(",", ".").split(".");
-  if (frac.length > decimals) {
-    throw new Error(`Слишком много знаков после точки: не больше ${decimals}.`);
-  }
-  const tail = (frac + "0".repeat(decimals)).slice(0, decimals);
-  return BigInt(whole || "0") * 10n ** BigInt(decimals) + BigInt(tail || "0");
-}
-
 /**
  * Отправка.
  *
@@ -56,10 +47,63 @@ export function sendScreen(ctx) {
 
   const to = el("input.input", {
     type: "text",
-    placeholder: "EQ… или UQ…",
+    placeholder: "Адрес, домен или @имя",
     autocapitalize: "none",
     autocomplete: "off",
     spellcheck: false,
+  });
+
+  /*
+   * Куда указывает домен.
+   *
+   * Показать это обязательно: имя человек читает, а подписывает он адрес,
+   * и между ними стоит запись, которую владелец домена может поменять когда
+   * угодно. Подписывать вслепую нельзя.
+   */
+  const resolvedLine = el("p.resolved", { style: "display:none" });
+
+  let resolved = null;
+  let lookUps = 0;
+  let lookUpTimer = null;
+
+  const say = (text, bad = false) => {
+    resolvedLine.textContent = text;
+    resolvedLine.style.display = text ? "" : "none";
+    resolvedLine.classList.toggle("resolved--bad", bad);
+  };
+
+  const lookUp = async () => {
+    resolved = null;
+    const domain = toDomain(to.value);
+    if (!domain) {
+      say("");
+      return;
+    }
+
+    // Отвечает только последний запрос: пока летит ответ, имя могли дописать.
+    const ticket = ++lookUps;
+    say(`Ищем ${domain}…`);
+
+    try {
+      const found = await resolveDomain(domain, wallet.network);
+      if (ticket !== lookUps) return;
+      if (!found) {
+        say(`${domain} ни на что не указывает`, true);
+        return;
+      }
+      resolved = found;
+      say(`${domain} → ${shortAddress(found.address, 6, 6)}`);
+    } catch (e) {
+      if (ticket !== lookUps) return;
+      say(explainError(e), true);
+    }
+  };
+
+  to.addEventListener("input", () => {
+    resolved = null;
+    clearTimeout(lookUpTimer);
+    // Не на каждую букву: индексатор пускает примерно запрос в секунду.
+    lookUpTimer = setTimeout(lookUp, 600);
   });
   // Точность берём у выбранной монеты: у GRAM девять знаков, у USD₮ шесть.
   const amount = amountInput({ placeholder: "0.1", decimals: () => asset.decimals ?? 9 });
@@ -167,11 +211,24 @@ export function sendScreen(ctx) {
         send,
         async () => {
           let dest;
-          try {
-            dest = Address.parse(to.value.trim());
-          } catch {
-            haptic("error");
-            return toast("Это не похоже на адрес TON", { error: true });
+          const typed = to.value.trim();
+          const domain = toDomain(typed);
+
+          if (domain) {
+            // Резолв мог не долететь: человек вправе нажать сразу после ввода.
+            if (resolved?.domain !== domain) await lookUp();
+            if (!resolved) {
+              haptic("error");
+              return toast(`Не нашли, куда указывает ${domain}`, { error: true });
+            }
+            dest = Address.parse(resolved.address);
+          } else {
+            try {
+              dest = Address.parse(typed);
+            } catch {
+              haptic("error");
+              return toast("Это не похоже на адрес TON", { error: true });
+            }
           }
 
           const raw = amount.value.trim().replace(",", ".");
@@ -244,7 +301,10 @@ export function sendScreen(ctx) {
           const ok = await sheet({
             title: "Проверьте перевод",
             body: el("div", {}, [
-              line("Кому", shortAddress(dest.toString({ bounceable: false }))),
+              line("Кому", resolved?.domain ?? shortAddress(dest.toString({ bounceable: false }))),
+              // При переводе по имени адрес показываем отдельной строкой:
+              // подписывается именно он, а запись домена владелец может менять.
+              resolved && line("Адрес", shortAddress(dest.toString({ bounceable: false }))),
               asset.kind === "nft"
                 ? line("Что", asset.name === "NFT" ? asset.collection || "NFT" : asset.name)
                 : line("Сумма", `${raw} ${asset.symbol}`),
@@ -293,7 +353,11 @@ export function sendScreen(ctx) {
     balanceLine,
 
     el("div.glass", {}, [
-      el("label.field", {}, [el("span.field__label", { text: "Адрес получателя" }), to]),
+      el("label.field", {}, [
+        el("span.field__label", { text: "Адрес получателя" }),
+        to,
+        resolvedLine,
+      ]),
       amountField,
       el("label.field", {}, [el("span.field__label", { text: "Сообщение" }), note]),
     ]),
