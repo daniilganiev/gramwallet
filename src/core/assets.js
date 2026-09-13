@@ -22,30 +22,87 @@ const API = {
 };
 
 /*
- * Публичный toncenter пускает примерно один запрос в секунду на адрес.
- * Экрану нужно три-четыре подряд — токены, их описания, NFT, история, —
- * поэтому пропускаем их по одному с паузой, а не веером. Иначе часть
- * ответов приходит как 429, и список выглядит пустым на ровном месте.
+ * Очередь запросов к индексатору.
+ *
+ * Публичный toncenter держит около запроса в секунду, и обойти это нечем.
+ * Пара запросов вплотную проходит, но за неё же и платишь: следующий ловит
+ * 429 даже через полторы секунды, а откат стоит дороже, чем сэкономленная
+ * пауза. Поэтому темп ровный.
+ *
+ * Раз слотов мало, выигрыш берём очерёдностью. Ждут запросы по-разному:
+ * историю человек ждёт глядя в экран, а списки на главном обновляются сами
+ * по себе. Интерактивный запрос встаёт перед фоновыми, а фоновый, которого
+ * уже никто не ждёт, снимается с очереди, не тратя слот.
  */
 const GAP_MS = 1100;
-let queue = Promise.resolve();
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const pending = [];
+let pumping = false;
 let lastAt = 0;
 
-function queued(fn) {
-  const run = queue.then(async () => {
-    const wait = lastAt + GAP_MS - Date.now();
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    try {
-      return await fn();
-    } finally {
-      lastAt = Date.now();
-    }
+/** Фоновый запрос, снятый с очереди: его экран успели закрыть. */
+const DROPPED = new Error("Запрос больше не нужен.");
+
+/**
+ * Ставит запрос в очередь.
+ *
+ * background — обновление, которое идёт само; такие пропускают вперёд всё
+ * интерактивное. alive — признак, что результат ещё кому-то нужен: его
+ * спрашивают в момент выдачи слота, а не постановки в очередь.
+ */
+function schedule(fn, { background = false, alive = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const task = { fn, alive, background, resolve, reject };
+    const firstBackground = background ? -1 : pending.findIndex((t) => t.background);
+    if (firstBackground < 0) pending.push(task);
+    else pending.splice(firstBackground, 0, task);
+    pump();
   });
-  queue = run.catch(() => {});
-  return run;
 }
 
-async function get(path, params, network = "mainnet") {
+async function pump() {
+  if (pumping) return;
+  pumping = true;
+
+  /*
+   * Уступаем ход тому, кто нас позвал. Экран ставит запрос в очередь прямо
+   * при сборке, когда его узел ещё не вставлен в документ, — проверь мы
+   * alive() сразу, запрос отбросило бы как ненужный, не отправив.
+   */
+  await sleep(0);
+
+  try {
+    while (pending.length) {
+      /*
+       * Паузу держим до того, как возьмём задачу из очереди. За эту секунду
+       * впереди может встать интерактивный запрос — и слот достанется ему,
+       * а не фоновому, который просто пришёл первым.
+       */
+      const wait = lastAt + GAP_MS - Date.now();
+      if (wait > 0) await sleep(wait);
+
+      const task = pending.shift();
+      if (task.alive && !task.alive()) {
+        task.reject(DROPPED);
+        continue;
+      }
+
+      try {
+        task.resolve(await task.fn());
+      } catch (e) {
+        task.reject(e);
+      } finally {
+        lastAt = Date.now();
+      }
+    }
+  } finally {
+    pumping = false;
+  }
+}
+
+async function get(path, params, network = "mainnet", opts = {}) {
   const url = new URL(`${API[network] ?? API.mainnet}${path}`);
   for (const [k, v] of params) url.searchParams.append(k, v);
 
@@ -54,23 +111,27 @@ async function get(path, params, network = "mainnet") {
    * на наши запросы: лимит общий на адрес, и в него попадают все, кто сидит
    * за тем же выходом в сеть. Одной повторной попытки не хватало, и экран
    * писал «не удалось спросить индексатор» там, где токены есть.
+   *
+   * Место в очереди берётся на каждую попытку отдельно: повтор — такой же
+   * запрос и в общий темп укладываться обязан.
    */
   const BACKOFF = [1500, 3500, 7000];
 
-  return queued(async () => {
-    let last = null;
-    for (let attempt = 0; attempt <= BACKOFF.length; attempt++) {
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      if (res.ok) return res.json();
-      last = res.status;
-      if ((res.status === 429 || res.status >= 500) && attempt < BACKOFF.length) {
-        await new Promise((r) => setTimeout(r, BACKOFF[attempt]));
-        continue;
-      }
-      throw new Error(`Индексатор ответил ${last}`);
+  let last = null;
+  for (let attempt = 0; attempt <= BACKOFF.length; attempt++) {
+    const res = await schedule(
+      () => fetch(url, { headers: { Accept: "application/json" } }),
+      opts,
+    );
+    if (res.ok) return res.json();
+    last = res.status;
+    if ((res.status === 429 || res.status >= 500) && attempt < BACKOFF.length) {
+      await sleep(BACKOFF[attempt]);
+      continue;
     }
     throw new Error(`Индексатор ответил ${last}`);
-  });
+  }
+  throw new Error(`Индексатор ответил ${last}`);
 }
 
 /** Хеш транзакции в том виде, в каком его понимают обозреватели. */
@@ -104,8 +165,13 @@ function fmtUnits(raw, decimals) {
  * ними самим нельзя — они живут на серверах, выбранных выпускающим
  * токена (у USDT это tether.to), и запрос выдал бы им наш адрес.
  */
-export async function fetchJettons(address, network = "mainnet") {
-  const data = await get("/jetton/wallets", [["owner_address", asString(address)], ["limit", "100"]], network);
+export async function fetchJettons(address, network = "mainnet", opts = {}) {
+  const data = await get(
+    "/jetton/wallets",
+    [["owner_address", asString(address)], ["limit", "100"]],
+    network,
+    opts,
+  );
   const wallets = (data.jetton_wallets ?? []).filter((w) => BigInt(w.balance ?? "0") > 0n);
   if (!wallets.length) return [];
 
@@ -127,8 +193,8 @@ export async function fetchJettons(address, network = "mainnet") {
 }
 
 /** NFT на кошельке. */
-export async function fetchNfts(address, network = "mainnet") {
-  const data = await get("/nft/items", [["owner_address", asString(address)], ["limit", "100"]], network);
+export async function fetchNfts(address, network = "mainnet", opts = {}) {
+  const data = await get("/nft/items", [["owner_address", asString(address)], ["limit", "100"]], network, opts);
 
   return (data.nft_items ?? []).map((item) => {
     const info = data.metadata?.[item.address]?.token_info?.[0] ?? {};
@@ -166,6 +232,9 @@ const SELF_OPS = {
   [OP.CHANGE_KEY_E]: "Ротация seed-фразы",
 };
 
+/** Что уже разбирали, по хешу транзакции. null — опкод не наш. */
+const nameCache = new Map();
+
 /** Опкод запроса WalletTg: подпись впереди, команда за ней. */
 export function requestOpcode(body) {
   if (!body) return null;
@@ -191,7 +260,7 @@ export function selfOpName(body) {
  * по ним. Индексатор не ответил — операции останутся безымянными, но список
  * покажется: ради названия терять историю целиком нельзя.
  */
-async function namesByHash(hashes, network) {
+async function namesByHash(hashes, network, opts) {
   const names = new Map();
   // Хеш в адресной строке занимает под шестьдесят символов, поэтому пачками.
   for (let i = 0; i < hashes.length; i += 20) {
@@ -202,6 +271,7 @@ async function namesByHash(hashes, network) {
         "/transactions",
         [...chunk.map((h) => ["hash", h]), ["limit", String(chunk.length)]],
         network,
+        opts,
       );
     } catch {
       break;
@@ -223,12 +293,13 @@ async function namesByHash(hashes, network) {
  * служебное сообщение на чужой адрес (кошелёк токена), а не как «отправил
  * 0.03 USD₮». Индексатор уже собрал их в события — берём готовое.
  */
-export async function fetchHistory(address, network = "mainnet", limit = 100) {
+export async function fetchHistory(address, network = "mainnet", limit = 100, opts = {}) {
   const mine = asString(address);
   const data = await get(
     "/actions",
     [["account", mine], ["limit", String(limit)], ["sort", "desc"]],
     network,
+    opts,
   );
 
   /*
@@ -308,14 +379,43 @@ export async function fetchHistory(address, network = "mainnet", limit = 100) {
     return { ...row, kind: "self", title: UNNAMED, amount: "", unit: "", peer: null };
   });
 
-  const unnamed = rows.filter((r) => r.title === UNNAMED && r.hash);
-  if (unnamed.length) {
-    const names = await namesByHash([...new Set(unnamed.map((r) => r.hash))], network);
-    for (const r of unnamed) {
-      const name = names.get(r.hash);
-      if (name) r.title = name;
-    }
-  }
-
   return rows;
+}
+
+/**
+ * Дописывает названия операциям, которые индексатор не разобрал.
+ *
+ * Отдельным шагом, уже после показа списка: за телами транзакций нужен
+ * второй запрос, а он в общем темпе стоит секунду с лишним. Держать ради
+ * двух заголовков всю историю за полосой ожидания — плохая сделка.
+ *
+ * Возвращает строки, у которых название изменилось: экрану остаётся
+ * переписать их заголовки на месте.
+ */
+export async function nameSelfOps(rows, network = "mainnet", opts = {}) {
+  const unnamed = rows.filter((r) => r.title === UNNAMED && r.hash);
+  if (!unnamed.length) return [];
+
+  const changed = [];
+  const take = (r, name) => {
+    if (!name) return;
+    r.title = name;
+    changed.push(r);
+  };
+
+  // Уже разобранное берём из памяти: тело транзакции не меняется никогда,
+  // и второй заход на экран не должен снова стоить запроса.
+  const ask = [];
+  for (const r of unnamed) {
+    if (nameCache.has(r.hash)) take(r, nameCache.get(r.hash));
+    else if (!ask.includes(r.hash)) ask.push(r.hash);
+  }
+  if (!ask.length) return changed;
+
+  const names = await namesByHash(ask, network, opts);
+  // Запоминаем и промахи: чужой опкод вторым запросом своим не станет.
+  for (const h of ask) nameCache.set(h, names.get(h) ?? null);
+  for (const r of unnamed) take(r, names.get(r.hash));
+
+  return changed;
 }

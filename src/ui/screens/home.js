@@ -298,10 +298,18 @@ export function homeScreen(ctx) {
     assets.classList.toggle("home__in", first && !fromCache);
   };
 
-  const loadAssets = async () => {
+  /*
+   * Списки — фоновое обновление. Человек смотрит на баланс, а тот идёт
+   * мимо индексатора, прямо к ноде. Значит эти два запроса обязаны уступать
+   * дорогу всему, чего ждут глядя в экран, и сниматься с очереди, если
+   * с главного уже ушли: иначе история открывается за ними, а не вместо.
+   */
+  const idle = () => ({ background: true, alive: () => screen.isConnected });
+
+  const loadAssets = async (opts = {}) => {
     const [jettons, nfts] = await Promise.all([
-      fetchJettons(addressText, wallet.network).catch(() => null),
-      fetchNfts(addressText, wallet.network).catch(() => null),
+      fetchJettons(addressText, wallet.network, opts).catch(() => null),
+      fetchNfts(addressText, wallet.network, opts).catch(() => null),
     ]);
     // Молчание индексатора — не новость: держим на экране прошлые списки.
     if (jettons === null && nfts === null && painted !== null) return null;
@@ -421,7 +429,7 @@ export function homeScreen(ctx) {
   /** Один круг опроса списков. Только для развёрнутого кошелька. */
   const pullAssets = async () => {
     if (busy || mode !== "ready") return;
-    const got = await loadAssets();
+    const got = await loadAssets(idle());
 
     if (!got || (got[0] === null && got[1] === null)) {
       assetFails += 1;
@@ -499,7 +507,7 @@ export function homeScreen(ctx) {
        */
       const ready = Promise.all([
         wallet.getState().then((s) => s.balance ?? 0n).catch(() => null),
-        loadAssets().catch(() => null),
+        loadAssets(idle()).catch(() => null),
       ]);
 
       under("Закрыть терминал", async () => {

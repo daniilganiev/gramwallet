@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/encoding.test.js && node test/rotation.test.js && node test/vault.test.js"
+    "test": "node test/encoding.test.js && node test/rotation.test.js && node test/vault.test.js && node test/queue.test.js"
   },
   "dependencies": {
     "@orbs-network/ton-access": "^2.3.3",
