@@ -1,5 +1,5 @@
 import { el, shortAddress } from "../dom.js";
-import { diamond, linkButton, pinField, runAction, sheet } from "../components.js";
+import { diamond, linkButton, pinField, PIN_LENGTH, sheet } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { getMeta, unlock, wipe } from "../../crypto/vault.js";
 import { TgWallet } from "../../core/wallet.js";
@@ -7,35 +7,47 @@ import { TgWallet } from "../../core/wallet.js";
 /** Экран ввода PIN при открытии приложения. */
 export function lockScreen(ctx) {
   const meta = getMeta();
-  const gate = pinField("PIN");
+
+  /*
+   * Кнопки «Открыть» здесь нет.
+   *
+   * PIN ровно шесть символов, и как только набран последний, ждать больше
+   * нечего: нажатие после него ничего не решает, а шаг добавляет. Работа
+   * видна в самом поле, ошибка — под ним.
+   */
+  const gate = pinField("PIN", { onFull: () => submit() });
   const pin = gate.input;
   const error = el("div.field__error", { style: "display:none" });
 
-  const open = el("button.btn.btn--primary", {
-    type: "button",
-    text: "Открыть",
-    onclick: () =>
-      runAction(open, async () => {
-        try {
-          const data = await unlock(pin.value.trim());
-          ctx.session = data;
-          ctx.wallet = await TgWallet.fromMnemonic(data.mnemonic, {
-            network: data.network,
-            address: data.address,
-          });
-          haptic("success");
-          ctx.go("home");
-        } catch (e) {
-          error.textContent = e.message;
-          error.style.display = "";
-          pin.value = "";
-          pin.classList.add("input--error");
-          haptic("error");
-        }
-      }),
-  });
+  let working = false;
 
-  pin.addEventListener("keydown", (e) => e.key === "Enter" && open.click());
+  async function submit() {
+    if (working || pin.value.length !== PIN_LENGTH) return;
+    working = true;
+    gate.busy(true);
+    error.style.display = "none";
+
+    try {
+      const data = await unlock(pin.value.trim());
+      ctx.session = data;
+      ctx.wallet = await TgWallet.fromMnemonic(data.mnemonic, {
+        network: data.network,
+        address: data.address,
+      });
+      haptic("success");
+      ctx.go("home");
+    } catch (e) {
+      error.textContent = e.message;
+      error.style.display = "";
+      gate.fail();
+      haptic("error");
+    } finally {
+      working = false;
+      gate.busy(false);
+    }
+  }
+
+  pin.addEventListener("keydown", (e) => e.key === "Enter" && submit());
 
   /*
    * Выходы для того, кто забыл PIN.
@@ -56,7 +68,7 @@ export function lockScreen(ctx) {
     el("div.screen__spacer"),
     el("div.center", {}, [
       el("div.lock__gem", {}, [diamond(96)]),
-      el("h1", { text: "С возвращением" }),
+      el("h1.glow", { "data-t": "С возвращением", text: "С возвращением" }),
       meta?.address && el("p.faint", { text: shortAddress(meta.address, 8, 8) }),
     ]),
 
@@ -64,7 +76,6 @@ export function lockScreen(ctx) {
     error,
 
     el("div.screen__spacer"),
-    el("div.screen__actions", {}, [open]),
 
     // Выходы стоят отдельно и ниже: это не соседи кнопки «Открыть», а другой
     // разговор — оба стирают кошелёк с устройства.
@@ -98,7 +109,7 @@ export function lockScreen(ctx) {
  */
 export function requirePin() {
   return new Promise((resolve) => {
-    const gate = pinField("PIN");
+    const gate = pinField("PIN", { onFull: () => submit() });
     const pin = gate.input;
     const error = el("div.field__error", { style: "display:none" });
 
@@ -109,26 +120,31 @@ export function requirePin() {
       resolve(value);
     };
 
-    const confirm = el("button.btn.btn--primary", {
-      type: "button",
-      text: "Подтвердить",
-      onclick: () =>
-        runAction(confirm, async () => {
-          const value = pin.value.trim();
-          try {
-            await unlock(value);
-            haptic("success");
-            close(value);
-          } catch (e) {
-            error.textContent = e.message;
-            error.style.display = "";
-            pin.value = "";
-            haptic("error");
-          }
-        }),
-    });
+    let working = false;
 
-    pin.addEventListener("keydown", (e) => e.key === "Enter" && confirm.click());
+    async function submit() {
+      if (working || pin.value.length !== PIN_LENGTH) return;
+      working = true;
+      gate.busy(true);
+      error.style.display = "none";
+
+      const value = pin.value.trim();
+      try {
+        await unlock(value);
+        haptic("success");
+        close(value);
+      } catch (e) {
+        error.textContent = e.message;
+        error.style.display = "";
+        gate.fail();
+        haptic("error");
+      } finally {
+        working = false;
+        gate.busy(false);
+      }
+    }
+
+    pin.addEventListener("keydown", (e) => e.key === "Enter" && submit());
 
     const overlay = el("div.modal", { onclick: (e) => e.target === overlay && close(null) }, [
       el("div.modal__sheet", {}, [
@@ -137,7 +153,6 @@ export function requirePin() {
         gate.field,
         error,
         el("div.screen__actions", {}, [
-          confirm,
           el("button.btn.btn--link", { type: "button", text: "Отмена", onclick: () => close(null) }),
         ]),
       ]),

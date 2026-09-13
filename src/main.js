@@ -165,6 +165,38 @@ function dismissKeyboard() {
   );
 }
 
+/**
+ * Поле под клавиатурой.
+ *
+ * Высота экрана привязана к устойчивому вьюпорту, поэтому клавиатура больше
+ * ничего не пересобирает — но и не сдвигает: поле может оказаться прямо под
+ * ней. Доводим его в видимую часть сами, прокруткой самого экрана.
+ *
+ * Момент ловим по visualViewport: клавиатура выезжает с анимацией, и пока
+ * она едет, мерить нечего.
+ */
+function keepFocusVisible() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+
+  const reveal = () => {
+    const field = document.activeElement;
+    if (!field?.matches?.("input, textarea")) return;
+    const scroller = field.closest(".screen, .modal__sheet");
+    if (!scroller) return;
+
+    // Нижняя граница видимого: там, где начинается клавиатура.
+    const limit = vv.offsetTop + vv.height - 16;
+    const over = field.getBoundingClientRect().bottom - limit;
+    if (over > 1) scroller.scrollBy({ top: over, behavior: "smooth" });
+  };
+
+  vv.addEventListener("resize", reveal);
+  // Фокус может перейти на соседнее поле, когда клавиатура уже стоит:
+  // размер вьюпорта тогда не меняется, и события resize не будет.
+  document.addEventListener("focusin", () => setTimeout(reveal, 120));
+}
+
 function catchErrors() {
   const show = (what) => {
     toast(String(what?.message ?? what ?? "неизвестная ошибка"), { error: true, ms: 12000 });
@@ -177,6 +209,7 @@ async function boot() {
   catchErrors();
   pressFeedback();
   dismissKeyboard();
+  keepFocusVisible();
   mountBackground();
   initTelegram();
 

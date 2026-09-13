@@ -13,11 +13,35 @@ const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
 
 export const isTelegram = Boolean(tg?.initData !== undefined && tg?.platform !== "unknown");
 
+/**
+ * Высота, от которой считается вёрстка.
+ *
+ * Telegram отдаёт две: текущую и последнюю устойчивую. Клавиатура меняет
+ * первую и не трогает вторую, поэтому геометрию считаем от устойчивой —
+ * иначе распорки на экранах сжимаются и вся композиция подскакивает.
+ *
+ * Клиент обещает ставить переменную сам, но не всякая версия это делает,
+ * поэтому пишем её и отсюда: лишняя запись того же значения ничего не стоит.
+ */
+function trackViewport() {
+  const apply = () => {
+    const h = tg?.viewportStableHeight;
+    if (h) document.documentElement.style.setProperty("--tg-viewport-stable-height", `${h}px`);
+  };
+  apply();
+  try {
+    tg?.onEvent?.("viewportChanged", apply);
+  } catch {
+    // Старый клиент не знает события — останемся на высоте родителя.
+  }
+}
+
 export function initTelegram() {
   if (!tg) return;
   try {
     tg.ready();
     tg.expand();
+    trackViewport();
     tg.setHeaderColor?.("#0E1013");
     tg.setBackgroundColor?.("#0E1013");
     tg.disableVerticalSwipes?.();

@@ -222,26 +222,32 @@ export const link = (text, href) =>
 /** Сколько символов в PIN. Одно место на всё приложение. */
 export const PIN_LENGTH = 6;
 
+/** Сколько держать набранный символ видимым, прежде чем закрыть точкой. */
+const PEEK_MS = 750;
+
 /**
- * Поле PIN.
+ * Поле, которое ловит ввод для ячеек PIN.
  *
- * Штатный type="password" рисует кружки, и заменить их символ нечем: браузер
- * не отдаёт эту маску ни CSS, ни атрибутом. Поэтому поле обычное текстовое,
- * а маскируем сами — показываем звёздочки, а набранное держим в замыкании.
- * Побочно это даже честнее: настоящий PIN не лежит в разметке ни секунды.
+ * Само оно прозрачное и лежит поверх ячеек: без настоящего input на телефоне
+ * не вызвать клавиатуру, а рисовать ячейки поверх него куда проще, чем
+ * заставлять браузер показать шесть отдельных клеток.
+ *
+ * Штатный type="password" не годится: он рисует свои кружки, и заменить их
+ * нечем — браузер не отдаёт эту маску ни CSS, ни атрибутом. Поэтому поле
+ * текстовое, маска своя, а набранное живёт в замыкании. Побочно это честнее:
+ * настоящий PIN не лежит в разметке ни секунды.
  *
  * Свойство value переопределено, поэтому снаружи поле ведёт себя как обычный
  * input: читаем pin.value, чистим pin.value = "".
  */
 export function pinInput() {
-  const input = el("input.input.input--pin", {
+  const input = el("input.pin-catch", {
     type: "text",
     inputmode: "text",
     autocapitalize: "none",
     autocomplete: "off",
     spellcheck: false,
     maxlength: PIN_LENGTH,
-    placeholder: "*".repeat(PIN_LENGTH),
   });
 
   const native = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
@@ -250,17 +256,19 @@ export function pinInput() {
 
   input.addEventListener("input", () => {
     const shown = native.get.call(input);
-    const caret = input.selectionStart ?? shown.length;
 
-    // Всё, что не звёздочка, набрано только что: маска состоит из них одних.
+    /*
+     * Всё, что не звёздочка, набрано только что: маска состоит из них одних.
+     * Каретку держим в конце, поэтому правка всегда идёт с хвоста — на шести
+     * закрытых символах вставка в середину всё равно ничего не значит.
+     */
     const typed = shown.replace(/[*]/g, "");
-    const at = caret - typed.length;
-    const removed = real.length - (shown.length - typed.length);
+    const kept = shown.length - typed.length;
 
-    real = (real.slice(0, at) + typed + real.slice(at + removed)).slice(0, PIN_LENGTH);
+    real = (real.slice(0, kept) + typed).slice(0, PIN_LENGTH);
     draw();
-    const pos = Math.min(caret, real.length);
-    input.setSelectionRange(pos, pos);
+    input.setSelectionRange(real.length, real.length);
+    input.dispatchEvent(new Event("pin-change"));
   });
 
   Object.defineProperty(input, "value", {
@@ -358,29 +366,115 @@ export function copyButton(title, onclick) {
  * Шесть точек под полем показывают, сколько символов уже введено и сколько
  * осталось: звёздочки в поле идут вплотную, и на глаз их не сосчитать.
  */
-export function pinField(labelText = "PIN") {
+/**
+ * Поле PIN: шесть ячеек, которые и есть поле.
+ *
+ * Раньше здесь стоял обычный ввод со звёздочками, а рядом — ряд точек-счётчик.
+ * Плейсхолдером были те же шесть звёздочек, так что пустое поле отличалось от
+ * полного только прозрачностью текста, — точки и появились как заплатка к
+ * этому. Ячейки говорят то же самим своим видом: сколько нужно, понятно до
+ * первого нажатия, сколько набрано — по заливке, куда встанет следующий
+ * символ — по подсветке. Один указатель вместо двух.
+ *
+ * Набранный символ на мгновение видно. PIN буквенно-цифровой, промахнуться
+ * по букве на телефонной клавиатуре легко, а иначе опечатку не заметить:
+ * все ячейки закрыты одинаковыми точками.
+ *
+ * onFull зовётся, когда набран последний символ. Экран блокировки открывает
+ * этим кошелёк сам, не требуя отдельного нажатия.
+ */
+export function pinField(labelText = "PIN", { onFull = null } = {}) {
   const input = pinInput();
-  const dots = el(
-    "div.pin-dots",
-    {},
-    Array.from({ length: PIN_LENGTH }, () => el("span.pin-dot")),
+
+  const cells = Array.from({ length: PIN_LENGTH }, () =>
+    el("div.pin-cell", {}, [
+      el("span.pin-cell__dot"),
+      el("span.pin-cell__char"),
+      el("span.pin-cell__caret", { hidden: true }),
+    ]),
   );
+
+  const box = el("div.pin-cells", {}, [input, ...cells]);
+
+  let peekAt = -1;
+  let peekTimer = null;
+  let focused = false;
+  let was = 0;
 
   const paint = () => {
     const n = input.value.length;
-    [...dots.children].forEach((dot, i) => dot.classList.toggle("pin-dot--on", i < n));
+    cells.forEach((cell, i) => {
+      const [dot, char, caret] = cell.children;
+      void dot;
+      cell.classList.toggle("pin-cell--on", i < n);
+      cell.classList.toggle("pin-cell--peek", i === peekAt);
+      // Подсвечиваем следующую ячейку только в фокусе: без него подсветка
+      // обещала бы ввод, которого не происходит.
+      const next = focused && i === n && n < PIN_LENGTH;
+      cell.classList.toggle("pin-cell--next", next);
+      caret.hidden = !next;
+      char.textContent = i === peekAt ? input.value[i] : "";
+    });
   };
 
-  input.addEventListener("input", paint);
-  input.addEventListener("pin-change", paint);
+  const onChange = () => {
+    const n = input.value.length;
+    box.classList.remove("pin-cells--error");
+
+    clearTimeout(peekTimer);
+    peekAt = -1;
+    if (n > was) {
+      peekAt = n - 1;
+      peekTimer = setTimeout(() => {
+        peekAt = -1;
+        paint();
+      }, PEEK_MS);
+    }
+    was = n;
+
+    paint();
+    // Даём символу показаться, прежде чем экран уедет дальше.
+    if (n === PIN_LENGTH && onFull) setTimeout(() => onFull(), 380);
+  };
+
+  input.addEventListener("pin-change", onChange);
+  input.addEventListener("focus", () => {
+    focused = true;
+    paint();
+  });
+  input.addEventListener("blur", () => {
+    focused = false;
+    paint();
+  });
+
   paint();
 
   const field = el("label.field.field--pin", {}, [
     el("span.field__label", { text: labelText }),
-    el("div.pin-row", {}, [input, dots]),
+    box,
   ]);
 
-  return { field, input };
+  /** Ошибка: обвести ячейки красным и встряхнуть. Поле при этом чистится. */
+  const fail = () => {
+    input.value = "";
+    was = 0;
+    box.classList.add("pin-cells--error", "pin-cells--shake");
+    setTimeout(() => box.classList.remove("pin-cells--shake"), 340);
+  };
+
+  /*
+   * Работа идёт прямо в поле.
+   *
+   * Кнопки под кодом больше нет, а вывод ключа через Argon2id занимает на
+   * слабом телефоне заметную долю секунды. Без этого шестой символ выглядел
+   * бы как «нажал и ничего не случилось». Ввод на это время закрываем.
+   */
+  const busy = (on) => {
+    input.readOnly = on;
+    box.classList.toggle("pin-cells--busy", on);
+  };
+
+  return { field, input, fail, busy };
 }
 
 /** Значок GitHub — восьмёрка кота-осьминога, официальный контур марки. */

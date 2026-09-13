@@ -100,7 +100,7 @@ export function verifyScreen(ctx) {
   });
 
   return el("div.screen.stack", {}, [
-    el("h1", { text: "Проверим запись" }),
+    el("h1.glow", { "data-t": "Проверим запись", text: "Проверим запись" }),
     el("p.lead", { text: "Введи три слова из фразы — так мы убедимся, что ты её действительно сохранил." }),
 
     el(
@@ -126,8 +126,14 @@ export function pinScreen(ctx) {
 
   // Шесть символов, буквы и цифры. Регистр не учитываем — на телефоне
   // промахнуться по Caps проще, чем забыть сам код.
-  const first = pinField("PIN");
-  const second = pinField("Ещё раз");
+  // Набран первый код — курсор сам переходит во второе поле.
+  const first = pinField("PIN", { onFull: () => pin2.focus() });
+  /*
+   * Второй код сам ничего не сохраняет: в отличие от разблокировки, здесь
+   * человек заводит кошелёк, и это подтверждают осознанно. Но о несовпадении
+   * говорим сразу при наборе, а не после нажатия «Сохранить».
+   */
+  const second = pinField("Ещё раз", { onFull: () => match() });
   const pin = first.input;
   const pin2 = second.input;
   const error = el("div.field__error", { style: "display:none" });
@@ -136,6 +142,16 @@ export function pinScreen(ctx) {
     error.textContent = msg;
     error.style.display = "";
     haptic("error");
+  };
+
+  const match = () => {
+    if (pin.value.length !== PIN_LENGTH) return;
+    if (pin.value.toLowerCase() === pin2.value.toLowerCase()) {
+      error.style.display = "none";
+      return;
+    }
+    fail("PIN не совпадает.");
+    second.fail();
   };
 
   const save = el("button.btn.btn--primary", {

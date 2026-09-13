@@ -285,10 +285,22 @@ body {
 
 /* --- Каркас экрана ------------------------------------------------------ */
 
+/*
+ * Высоту берём из устойчивого вьюпорта Telegram, а не из текущего.
+ *
+ * Экраны — флекс-колонки с распорками flex: 1, то есть свободное место они
+ * делят между собой. Стоит клавиатуре ужать вьюпорт, как распорки сжимаются
+ * и вся композиция пересобирается — содержимое подскакивает рывком.
+ *
+ * Устойчивая высота клавиатурой не меняется: геометрия стоит на месте,
+ * а клавиатура просто накрывает низ. Поле под ней доводит до видимого места
+ * keepFocusVisible() в main.js. Вне Telegram переменной нет — тогда, как
+ * раньше, во весь родитель.
+ */
 #app {
   position: relative;
   z-index: 1;
-  height: 100%;
+  height: var(--tg-viewport-stable-height, 100%);
 }
 
 /* Содержательные блоки не сжимаются — распорки для этого и заведены. */
@@ -853,18 +865,6 @@ textarea.input {
  * место набора, а как случайная чёрточка. Разрядка оставлена — она делает
  * точки счётными, чтобы было видно, сколько символов уже введено.
  */
-.input--pin {
-  text-align: left;
-  letter-spacing: 0.42em;
-  font-size: 22px;
-  caret-color: #7fb3ff;
-}
-
-/* Пока поле пустое, мигающая полоска показывает, что можно набирать. */
-.input--pin:focus {
-  caret-color: #a8ccff;
-}
-
 .field__error {
   margin-top: 6px;
   font-size: 13px;
@@ -2880,48 +2880,197 @@ textarea.input {
 /* --- Поле PIN ------------------------------------------------------------ */
 
 /*
- * Поле ровно под шесть символов, а не во всю карточку: пустая половина
- * читалась как «сюда можно ещё». Рядом счётчик — звёздочки идут вплотную,
- * и на глаз их не сосчитать.
+ * Шесть ячеек — это и есть поле. Настоящий input лежит поверх них прозрачным
+ * слоем: без него на телефоне не вызвать клавиатуру, а рисовать клетки поверх
+ * куда проще, чем добиваться шести отдельных полей от браузера.
  */
-.pin-row {
+.pin-cells {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.pin-catch {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  opacity: 0;
+  cursor: text;
+  /* Шрифт мельче 16px заставляет iOS увеличивать страницу при фокусе. */
+  font-size: 16px;
+}
+
+.pin-cell {
+  position: relative;
+  aspect-ratio: 44 / 54;
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
+  border: 1.5px solid rgba(0, 0, 0, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  transition:
+    border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
 }
 
-.field--pin .input--pin {
-  width: 178px;
-  flex: 0 0 auto;
+/* Заполненная ячейка плотнее пустой: объём набранного виден формой. */
+.pin-cell--on {
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.94);
 }
 
-.pin-dots {
-  display: flex;
-  gap: 7px;
-}
-
-.pin-dot {
-  width: 9px;
-  height: 9px;
+.pin-cell__dot {
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.22);
-  background: transparent;
-  transition: background 0.16s var(--ease), transform 0.16s var(--ease);
+  background: var(--ink);
+  transform: scale(0);
+  transition: transform 0.16s cubic-bezier(0.3, 1.5, 0.5, 1);
 }
 
-.pin-dot--on {
-  border-color: transparent;
+.pin-cell--on .pin-cell__dot {
+  transform: scale(1);
+}
+
+/* Набранный символ виден мгновение, потом его закрывает точка. */
+.pin-cell__char {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+
+.pin-cell--peek .pin-cell__char {
+  opacity: 1;
+}
+
+.pin-cell--peek .pin-cell__dot {
+  transform: scale(0);
+}
+
+/* Куда встанет следующий символ. */
+.pin-cell--next {
+  border-color: #2e7dff;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 3px rgba(46, 125, 255, 0.16);
+}
+
+.pin-cell__caret {
+  width: 2px;
+  height: 24px;
+  border-radius: 2px;
   background: #2e7dff;
-  transform: scale(1.15);
+  animation: pin-blink 1.1s steps(1, end) infinite;
 }
 
-/* В тёмной шторке подтверждения карточки нет — точки светлые. */
-.modal__sheet .pin-dot {
-  border-color: rgba(255, 255, 255, 0.28);
+@keyframes pin-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
 }
 
-.modal__sheet .pin-dot--on {
+/* Поле не получает обводку само — показываем фокус по ловящему полю. */
+.pin-cells:has(.pin-catch:focus-visible) {
+  outline: 2px solid #7fb3ff;
+  outline-offset: 6px;
+  border-radius: 16px;
+}
+
+/* Пока идёт проверка кода, по точкам бежит волна. */
+.pin-cells--busy .pin-cell__dot {
+  animation: pin-work 1.1s ease-in-out infinite;
+}
+
+.pin-cells--busy .pin-cell:nth-of-type(2) .pin-cell__dot { animation-delay: 0.09s; }
+.pin-cells--busy .pin-cell:nth-of-type(3) .pin-cell__dot { animation-delay: 0.18s; }
+.pin-cells--busy .pin-cell:nth-of-type(4) .pin-cell__dot { animation-delay: 0.27s; }
+.pin-cells--busy .pin-cell:nth-of-type(5) .pin-cell__dot { animation-delay: 0.36s; }
+.pin-cells--busy .pin-cell:nth-of-type(6) .pin-cell__dot { animation-delay: 0.45s; }
+
+@keyframes pin-work {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.45);
+    opacity: 0.35;
+  }
+}
+
+.pin-cells--error .pin-cell {
+  border-color: rgba(198, 40, 40, 0.6);
+}
+
+.pin-cells--shake {
+  animation: pin-shake 0.32s var(--ease);
+}
+
+@keyframes pin-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  45% {
+    transform: translateX(5px);
+  }
+  70% {
+    transform: translateX(-3px);
+  }
+}
+
+/* В тёмной шторке подтверждения светлой карточки нет — ячейки светятся. */
+.modal__sheet .pin-cell {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.modal__sheet .pin-cell--on {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.modal__sheet .pin-cell__dot {
+  background: var(--text);
+}
+
+.modal__sheet .pin-cell--next {
+  border-color: #7fb3ff;
+  background: rgba(127, 179, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(127, 179, 255, 0.16);
+}
+
+.modal__sheet .pin-cell__caret {
   background: #7fb3ff;
+}
+
+.modal__sheet .pin-cells--error .pin-cell {
+  border-color: rgba(255, 90, 90, 0.6);
 }
 
 /* Кнопка под отработавшим терминалом: убрать лог, когда он больше не нужен. */
