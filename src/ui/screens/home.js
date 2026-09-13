@@ -2,7 +2,7 @@ import { fromNano, toNano } from "@ton/core";
 
 import { el, copyText, fmtCoins } from "../dom.js";
 import { copyButton, diamond, glassButton, linkButton, primaryButton, qrButton, qrCode, runAction, sheet, terminal, toast } from "../components.js";
-import { haptic, openLink } from "../../telegram.js";
+import { haptic } from "../../telegram.js";
 import { COIN, MIN_DEPLOY_BALANCE } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
 import { fetchJettons, fetchNfts } from "../../core/assets.js";
@@ -196,19 +196,20 @@ export function homeScreen(ctx) {
   const tvlValue = el("span.tvl__value");
   const tvlChange = el("span.tvl__change");
 
-  const tvl = el(
-    "button.tvl",
-    {
-      type: "button",
-      hidden: true,
-      title: "TVL сети TON по данным DefiLlama",
-      onclick: () => {
-        haptic("light");
-        openLink("https://defillama.com/chain/TON");
-      },
-    },
-    [el("span.tvl__label", { text: "TVL" }), tvlValue, tvlChange],
-  );
+  /*
+   * Блок, а не кнопка: нажимать тут нечего, никуда он не ведёт. Оформлять
+   * неподвижную справку как нажимаемое — врать пальцу.
+   */
+  const tvl = el("div.tvl", { hidden: true }, [
+    // Чего именно TVL — иначе цифра висит без имени. Сеть по-прежнему TON,
+    // это монета в ней переименована в GRAM.
+    el("span.tvl__label", { text: "TVL сети TON" }),
+    tvlValue,
+    el("span.tvl__delta", {}, [tvlChange, el("span.tvl__span", { text: "за 30 дней" })]),
+    // Откуда цифра. Названо прямо: своей она не является, и выдавать её
+    // за собственную было бы нечестно.
+    el("span.tvl__source", { text: "источник: DefiLlama" }),
+  ]);
 
   fetchChainTvl()
     .then(({ tvl: locked, change }) => {
@@ -253,7 +254,7 @@ export function homeScreen(ctx) {
     // Плашка висит в пустом месте между кнопкой и нижним рядом: два
     // распорки по бокам держат её ровно посередине этого промежутка.
     el("div.screen__spacer"),
-    el("div.whatsnew-slot", {}, [whatsNew, tvl]),
+    el("div.whatsnew-slot", {}, [tvl, whatsNew]),
     el("div.screen__spacer"),
 
     el("div.home__nav", {}, [
