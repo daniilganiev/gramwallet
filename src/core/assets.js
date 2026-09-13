@@ -12,7 +12,9 @@
  * Ради иконки это плохой обмен, поэтому списки текстовые.
  */
 
-import { Address } from "@ton/core";
+import { Address, Cell } from "@ton/core";
+
+import { OP } from "./constants.js";
 
 const API = {
   mainnet: "https://toncenter.com/api/v3",
@@ -147,6 +149,74 @@ export async function fetchNfts(address, network = "mainnet") {
 }
 
 /**
+ * Название операции, которую индексатор не разобрал.
+ *
+ * Запрос к самому кошельку не порождает исходящих сообщений, и toncenter
+ * отдаёт такое событие как type "unknown" вообще без деталей: ни опкода,
+ * ни сторон. Так выглядит смена ключа — в истории она стояла безымянной
+ * «Операцией» рядом с обычными переводами.
+ *
+ * Опкод при этом лежит в теле внешнего сообщения, сразу за подписью. Поле
+ * opcode из ответа индексатора здесь не годится: он читает первые 32 бита
+ * тела, а у WalletTg там начало подписи, а не команда.
+ */
+const UNNAMED = "Операция";
+
+const SELF_OPS = {
+  [OP.CHANGE_KEY_E]: "Ротация seed-фразы",
+};
+
+/** Опкод запроса WalletTg: подпись впереди, команда за ней. */
+export function requestOpcode(body) {
+  if (!body) return null;
+  try {
+    const s = Cell.fromBase64(body).beginParse();
+    if (s.remainingBits < 512 + 32) return null;
+    s.skip(512);
+    return s.loadUint(32);
+  } catch {
+    return null;
+  }
+}
+
+/** Как назвать внешний запрос по его телу. null — не наш опкод. */
+export function selfOpName(body) {
+  return SELF_OPS[requestOpcode(body)] ?? null;
+}
+
+/**
+ * Называет операции по телам самих транзакций.
+ *
+ * Запрос уходит только если в истории есть неразобранные события, и только
+ * по ним. Индексатор не ответил — операции останутся безымянными, но список
+ * покажется: ради названия терять историю целиком нельзя.
+ */
+async function namesByHash(hashes, network) {
+  const names = new Map();
+  // Хеш в адресной строке занимает под шестьдесят символов, поэтому пачками.
+  for (let i = 0; i < hashes.length; i += 20) {
+    const chunk = hashes.slice(i, i + 20);
+    let data;
+    try {
+      data = await get(
+        "/transactions",
+        [...chunk.map((h) => ["hash", h]), ["limit", String(chunk.length)]],
+        network,
+      );
+    } catch {
+      break;
+    }
+    for (const tx of data.transactions ?? []) {
+      // Интересуют только внешние запросы: у них source пустой.
+      if (tx.in_msg?.source) continue;
+      const name = selfOpName(tx.in_msg?.message_content?.body);
+      if (name) names.set(tx.hash, name);
+    }
+  }
+  return names;
+}
+
+/**
  * История операций — в том же виде, в каком её показывают обозреватели.
  *
  * Сырые транзакции для этого не годятся: перевод токена в них выглядит как
@@ -192,7 +262,7 @@ export async function fetchHistory(address, network = "mainnet", limit = 100) {
   };
   const token = (a) => data.metadata?.[a]?.token_info?.[0] ?? {};
 
-  return (data.actions ?? []).map((act) => {
+  const rows = (data.actions ?? []).map((act) => {
     const d = act.details ?? {};
     const row = {
       at: Number(act.start_utime ?? 0) * 1000,
@@ -235,6 +305,17 @@ export async function fetchHistory(address, network = "mainnet", limit = 100) {
 
     // Тип, который индексатор не разобрал. Прятать нельзя: событие было,
     // и человек должен видеть его в списке, пусть и без подробностей.
-    return { ...row, kind: "self", title: "Операция", amount: "", unit: "", peer: null };
+    return { ...row, kind: "self", title: UNNAMED, amount: "", unit: "", peer: null };
   });
+
+  const unnamed = rows.filter((r) => r.title === UNNAMED && r.hash);
+  if (unnamed.length) {
+    const names = await namesByHash([...new Set(unnamed.map((r) => r.hash))], network);
+    for (const r of unnamed) {
+      const name = names.get(r.hash);
+      if (name) r.title = name;
+    }
+  }
+
+  return rows;
 }

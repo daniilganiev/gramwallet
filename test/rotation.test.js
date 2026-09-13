@@ -7,8 +7,15 @@ import crypto from "node:crypto";
 import { Address } from "@ton/core";
 import { keyPairFromSeed, signVerify } from "@ton/crypto";
 
-import { buildChangeKeyRequest, buildKeyRotationProof, signRequest } from "../src/core/serialize.js";
+import {
+  buildChangeKeyRequest,
+  buildKeyRotationProof,
+  buildSendRequest,
+  signRequest,
+  toMessageToSend,
+} from "../src/core/serialize.js";
 import { KEY_ROTATION_TAG, OP } from "../src/core/constants.js";
+import { requestOpcode, selfOpName } from "../src/core/assets.js";
 
 const randomKey = () => keyPairFromSeed(crypto.randomBytes(32));
 const randomAddress = () => new Address(0, crypto.randomBytes(32));
@@ -74,6 +81,36 @@ const body = signRequest(request, currentKey.secretKey);
 const outer = body.beginParse().loadBuffer(64);
 check("подпись стоит впереди", signVerify(request.hash(), outer, currentKey.publicKey));
 check("влезает в одну ячейку", body.bits.length <= 1023, `${body.bits.length} из 1023`);
+
+console.log("\nНазвание операции в истории");
+
+/*
+ * Тело настоящей ротации из мейннета. Индексатор отдаёт это событие как
+ * "unknown" без единой детали, и название берётся только отсюда — поэтому
+ * разбор проверяем на реальных байтах, а не на собранных тут же.
+ */
+const ROTATION_BODY =
+  "te6cckEBAgEAtQAB4KWZtmWXv/HYAgJXe5PCZW2f+Z1t81w78h3PVgFaKPBozXyv+58JxOnv5NMq/ZmBfMHLF9Xp2YGSwtV6G97t" +
+  "Ggr7upnIf/9/EWqXIM0AAAAEEkmkjojkpPcRrwQkNe4MpGxOfFykKypAvkT7503RFmMBAIBKQm8BiJENKINOvWeBWl5p+po1VtWn" +
+  "nHtB5EggszJKnpVoqcHXbRhJ1WL+Vizt6P5D6/cxfy7SLQ2g+4eeZ8sIyCMNJg==";
+
+const decoded = requestOpcode(ROTATION_BODY);
+check("опкод достаётся из-за подписи", decoded === OP.CHANGE_KEY_E, `0x${(decoded ?? 0).toString(16)}`);
+check("названа своим именем", selfOpName(ROTATION_BODY) === "Ротация seed-фразы");
+
+// Обычный перевод под это название попасть не должен.
+const transfer = signRequest(
+  buildSendRequest({
+    messages: [toMessageToSend({ to: ADDR, amount: "0.01" })],
+    subwalletId: 0x7fff7f11,
+    seqno: 0,
+    validUntil: 1788290000,
+    isExternal: true,
+  }),
+  currentKey.secretKey,
+);
+check("перевод остаётся без названия", selfOpName(transfer.toBoc().toString("base64")) === null);
+check("мусор не ломает разбор", requestOpcode("не-boc") === null && requestOpcode(null) === null);
 
 console.log(failed === 0 ? "\nВСЁ ЗЕЛЁНОЕ\n" : `\nПРОВАЛОВ: ${failed}\n`);
 process.exit(failed === 0 ? 0 : 1);
