@@ -168,9 +168,14 @@ function dismissKeyboard() {
 /**
  * Поле под клавиатурой.
  *
- * Высота экрана привязана к устойчивому вьюпорту, поэтому клавиатура больше
- * ничего не пересобирает — но и не сдвигает: поле может оказаться прямо под
- * ней. Доводим его в видимую часть сами, прокруткой самого экрана.
+ * Высота экрана привязана к устойчивому вьюпорту, а body зафиксирован —
+ * значит клавиатура ничего не пересобирает и браузер не подкручивает
+ * страницу сам. Остаётся поднять содержимое ровно настолько, чтобы поле
+ * вышло из-под клавиатуры, и опустить обратно, когда она уедет.
+ *
+ * Двигаем слой целиком, а не прокручиваем экран: прокрутка требует, чтобы
+ * содержимому было куда ехать, а на экране блокировки его ровно в высоту
+ * экрана — прокручивать нечего, и поле так и осталось бы закрытым.
  *
  * Момент ловим по visualViewport: клавиатура выезжает с анимацией, и пока
  * она едет, мерить нечего.
@@ -179,22 +184,50 @@ function keepFocusVisible() {
   const vv = window.visualViewport;
   if (!vv) return;
 
-  const reveal = () => {
-    const field = document.activeElement;
-    if (!field?.matches?.("input, textarea")) return;
-    const scroller = field.closest(".screen, .modal__sheet");
-    if (!scroller) return;
+  const app = document.getElementById("app");
+  let holder = null;
+  let lifted = 0;
 
-    // Нижняя граница видимого: там, где начинается клавиатура.
-    const limit = vv.offsetTop + vv.height - 16;
-    const over = field.getBoundingClientRect().bottom - limit;
-    if (over > 1) scroller.scrollBy({ top: over, behavior: "smooth" });
+  const place = (node, px) => {
+    node.style.transform = px ? `translate3d(0, ${-px}px, 0)` : "";
   };
 
-  vv.addEventListener("resize", reveal);
+  const adjust = () => {
+    const field = document.activeElement;
+
+    if (!field?.matches?.("input, textarea")) {
+      if (holder) place(holder, 0);
+      holder = null;
+      lifted = 0;
+      return;
+    }
+
+    // Шторка живёт на body отдельно от экранов — её и поднимаем, если поле в ней.
+    const next = field.closest(".modal") ?? app;
+    if (holder && holder !== next) {
+      place(holder, 0);
+      lifted = 0;
+    }
+    holder = next;
+
+    /*
+     * Прямоугольник уже посчитан с учётом подъёма, поэтому возвращаем его
+     * на место: иначе каждая проверка добавляла бы смещение к прошлому,
+     * и экран уползал бы вверх ступеньками.
+     */
+    const bottom = field.getBoundingClientRect().bottom + lifted;
+    const limit = vv.offsetTop + vv.height - 14;
+
+    lifted = Math.max(0, Math.round(bottom - limit));
+    place(holder, lifted);
+  };
+
+  vv.addEventListener("resize", adjust);
+  vv.addEventListener("scroll", adjust);
   // Фокус может перейти на соседнее поле, когда клавиатура уже стоит:
   // размер вьюпорта тогда не меняется, и события resize не будет.
-  document.addEventListener("focusin", () => setTimeout(reveal, 120));
+  document.addEventListener("focusin", () => setTimeout(adjust, 120));
+  document.addEventListener("focusout", () => setTimeout(adjust, 120));
 }
 
 function catchErrors() {
