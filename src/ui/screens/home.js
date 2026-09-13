@@ -2,10 +2,11 @@ import { fromNano, toNano } from "@ton/core";
 
 import { el, copyText, fmtCoins } from "../dom.js";
 import { copyButton, diamond, glassButton, linkButton, primaryButton, qrButton, qrCode, runAction, sheet, terminal, toast } from "../components.js";
-import { haptic } from "../../telegram.js";
+import { haptic, openLink } from "../../telegram.js";
 import { COIN, MIN_DEPLOY_BALANCE } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
 import { fetchJettons, fetchNfts } from "../../core/assets.js";
+import { fetchChainTvl, fmtUsd } from "../../core/tvl.js";
 
 /**
  * Последнее, что мы видели на кошельке.
@@ -181,6 +182,48 @@ export function homeScreen(ctx) {
     el("span.whatsnew__text", { text: "Что нового" }),
   ]);
 
+  /*
+   * Сколько всего денег заперто в сети.
+   *
+   * Одна величина с изменением — это плашка со счётчиком, а не график:
+   * рисовать кривую по тридцати точкам в объекте шириной в палец незачем.
+   * Направление показываем стрелкой, а не одним цветом: на красно-зелёную
+   * пару смотрит и тот, кто её не различает.
+   *
+   * Пока цифра не пришла, плашки нет вовсе. Ошибку здесь показывать нечему:
+   * это справка о сети, а не о кошельке, и пустое место честнее прочерка.
+   */
+  const tvlValue = el("span.tvl__value");
+  const tvlChange = el("span.tvl__change");
+
+  const tvl = el(
+    "button.tvl",
+    {
+      type: "button",
+      hidden: true,
+      title: "TVL сети TON по данным DefiLlama",
+      onclick: () => {
+        haptic("light");
+        openLink("https://defillama.com/chain/TON");
+      },
+    },
+    [el("span.tvl__label", { text: "TVL" }), tvlValue, tvlChange],
+  );
+
+  fetchChainTvl()
+    .then(({ tvl: locked, change }) => {
+      if (!screen.isConnected) return;
+      const up = change >= 0;
+      tvlValue.textContent = fmtUsd(locked);
+      tvlChange.textContent = `${up ? "▲" : "▼"} ${Math.abs(change).toFixed(1)}%`;
+      tvlChange.classList.toggle("tvl__change--up", up);
+      tvlChange.classList.toggle("tvl__change--down", !up);
+      tvl.hidden = false;
+    })
+    .catch(() => {
+      // Агрегатор промолчал — плашка просто не появится.
+    });
+
   const screen = el("div.screen.stack.home", {}, [
     el("h1.glow", { "data-t": "Ваш кошелёк", text: "Ваш кошелёк" }),
 
@@ -210,7 +253,7 @@ export function homeScreen(ctx) {
     // Плашка висит в пустом месте между кнопкой и нижним рядом: два
     // распорки по бокам держат её ровно посередине этого промежутка.
     el("div.screen__spacer"),
-    el("div.whatsnew-slot", {}, [whatsNew]),
+    el("div.whatsnew-slot", {}, [whatsNew, tvl]),
     el("div.screen__spacer"),
 
     el("div.home__nav", {}, [

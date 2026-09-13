@@ -3621,10 +3621,72 @@ textarea.input {
  * это приглашение, а не тревога.
  */
 /* Пилюля стоит посередине свободного места и чуть правее центра. */
+/*
+ * В слоте теперь двое: плашка «Что нового» и счётчик TVL. Раньше одинокая
+ * плашка сдвигалась вправо отступом; пару центрируем честно, а на узком
+ * экране она переносится в две строки.
+ */
 .whatsnew-slot {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  padding-left: 96px;
+  align-items: center;
+  gap: 10px;
+}
+
+/*
+ * Счётчик TVL. Оправа та же, что у соседней плашки, но без качания:
+ * «Что нового» зовёт нажать, а это справка, и дёргаться ей незачем.
+ */
+.tvl {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--r-btn);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* Плашка появляется только с цифрой: правило перебивает display выше. */
+.tvl[hidden] {
+  display: none;
+}
+
+.tvl__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.tvl__value {
+  font-weight: 600;
+}
+
+/* Знак несёт стрелка, цвет только усиливает: одним цветом сообщать нельзя. */
+.tvl__change {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.tvl__change--up {
+  color: var(--success);
+}
+
+.tvl__change--down {
+  color: var(--danger);
+}
+
+.tvl:active {
+  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .whatsnew {

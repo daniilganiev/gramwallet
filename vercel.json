@@ -7,7 +7,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://toncenter.com https://*.toncenter.com https://ton.access.orbs.network; frame-ancestors https://web.telegram.org https://telegram.org; base-uri 'none'; form-action 'none'; object-src 'none'"
+          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://toncenter.com https://*.toncenter.com https://ton.access.orbs.network https://api.llama.fi; frame-ancestors https://web.telegram.org https://telegram.org; base-uri 'none'; form-action 'none'; object-src 'none'"
         },
         { "key": "Referrer-Policy", "value": "no-referrer" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
