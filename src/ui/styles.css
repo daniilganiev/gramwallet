@@ -2601,6 +2601,14 @@ textarea.input {
   margin-top: var(--air-sm);
 }
 
+/* Строка на месте пустых списков: стоит прямо над кнопкой отправки. */
+.assets__hint {
+  margin: var(--sp-2) 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
 .assets__title {
   margin-bottom: 8px;
   font-size: 13px;
