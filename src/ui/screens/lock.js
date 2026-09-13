@@ -64,7 +64,7 @@ export function lockScreen(ctx) {
     ctx.go(next);
   };
 
-  return el("div.screen.stack", {}, [
+  return el("div.screen.stack.lock", {}, [
     el("div.screen__spacer"),
     el("div.center", {}, [
       el("div.lock__gem", {}, [diamond(96)]),
