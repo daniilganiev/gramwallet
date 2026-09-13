@@ -222,6 +222,66 @@ export const link = (text, href) =>
 /** Сколько символов в PIN. Одно место на всё приложение. */
 export const PIN_LENGTH = 6;
 
+/** Больше девяти знаков после разделителя не бывает: столько их в нанограммах. */
+const MAX_DECIMALS = 9;
+
+/**
+ * Поле суммы.
+ *
+ * Пускает только цифры и один разделитель дробной части. Штатный
+ * type="number" для этого не годится: на телефоне он приносит стрелки, своё
+ * понимание локали и «e» как допустимый символ, а часть клавиатур не даёт
+ * ввести через него запятую. Поэтому поле текстовое, а лишнее отсекаем сами,
+ * прямо при наборе — иначе буквы доживали до разбора суммы.
+ *
+ * Запятую не трогаем: на телефонной клавиатуре её печатают чаще точки,
+ * а при чтении суммы она и так становится точкой.
+ *
+ * decimals — сколько знаков после разделителя имеет смысл. У GRAM их девять,
+ * у жетонов бывает меньше: USD₮ считается до шести. Передаётся функцией,
+ * потому что на экране отправки монету меняют, не пересобирая поле.
+ */
+export function cleanAmount(raw, decimals = MAX_DECIMALS) {
+  const only = String(raw).replace(/[^\d.,]/g, "");
+  const at = only.search(/[.,]/);
+  if (at < 0) return only;
+
+  const max = Math.max(0, Math.min(decimals, MAX_DECIMALS));
+  // Разделитель может быть только один: всё, что после первого, уже не число.
+  const frac = only.slice(at + 1).replace(/[.,]/g, "");
+  return max === 0 ? only.slice(0, at) : only.slice(0, at + 1) + frac.slice(0, max);
+}
+
+export function amountInput({ decimals = () => MAX_DECIMALS, ...props } = {}) {
+  const input = el("input.input", {
+    type: "text",
+    inputmode: "decimal",
+    autocomplete: "off",
+    spellcheck: false,
+    ...props,
+  });
+
+  const clean = (raw) => cleanAmount(raw, decimals());
+
+  input.addEventListener("input", () => {
+    const before = input.value;
+    const after = clean(before);
+    if (after === before) return;
+
+    /*
+     * Каретку ставим туда, где она оказалась бы, если бы лишние символы
+     * и не набирались: длина очищенного куска слева от неё. Без этого
+     * каретка прыгает в конец на каждом отвергнутом нажатии.
+     */
+    const caret = input.selectionStart ?? before.length;
+    const pos = clean(before.slice(0, caret)).length;
+    input.value = after;
+    input.setSelectionRange(pos, pos);
+  });
+
+  return input;
+}
+
 /** Сколько держать набранный символ видимым, прежде чем закрыть точкой. */
 const PEEK_MS = 750;
 

@@ -1,7 +1,7 @@
 import { Address, fromNano, toNano } from "@ton/core";
 
 import { el, fmtCoins } from "../dom.js";
-import { glassButton, linkButton, runAction, sheet, toast } from "../components.js";
+import { amountInput, glassButton, linkButton, runAction, sheet, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { COIN } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
@@ -17,6 +17,32 @@ const MAX = 255;
 
 /** Сколько строк показываем сразу: чтобы было видно, что их несколько. */
 const START = 3;
+
+/** Сумма в строке списка: число с одним разделителем дробной части. */
+const AMOUNT = /^\d+(?:[.,]\d+)?$/;
+
+/**
+ * Разбирает строку вставленного списка.
+ *
+ * Разделителями считаем пробелы и точку с запятой, но НЕ запятую: в «0,5»
+ * она дробная. Раньше запятая стояла среди разделителей, строка распадалась
+ * на «0» и «5», суммой бралось первое — и вместо половины уходил ноль. Молча,
+ * потому что «0» разбирается без ошибки. При наборе руками запятая при этом
+ * понималась правильно, так что одно и то же число вело себя по-разному.
+ *
+ * Порядок в строке не важен: сумма узнаётся по тому, что она число, адрес —
+ * по тому, что не число. Строку без суммы не выбрасываем, а добавляем
+ * с пустым полем: незаполненное видно и правится на месте, а пропавшая
+ * строка — нет.
+ */
+export function parseLine(line) {
+  const parts = line.split(/[\s;]+/).filter(Boolean);
+  const at = parts.findIndex((p) => AMOUNT.test(p));
+  return {
+    to: parts.find((_, i) => i !== at) ?? "",
+    amount: at < 0 ? "" : parts[at].replace(",", "."),
+  };
+}
 
 /**
  * Пакетная отправка.
@@ -53,12 +79,8 @@ export function batchScreen(ctx) {
       spellcheck: false,
       value: to,
     });
-    const value = el("input.input.batch__amount", {
-      type: "text",
-      inputmode: "decimal",
-      placeholder: "0.1",
-      value: amount,
-    });
+    // Пакетом уходит только GRAM, поэтому точность всегда девять знаков.
+    const value = amountInput({ class: "batch__amount", placeholder: "0.1", value: amount });
 
     const row = el("div.batch__row", {}, [
       address,
@@ -123,7 +145,7 @@ export function batchScreen(ctx) {
    */
   const pasteList = async () => {
     const area = el("textarea.input", {
-      placeholder: "EQ… 0.5\nUQ… 1.25\nEQ… 0.1",
+      placeholder: "EQ… 0.5\nUQ… 1,25\nEQ… 0.1",
       autocapitalize: "none",
       autocomplete: "off",
       spellcheck: false,
@@ -132,7 +154,9 @@ export function batchScreen(ctx) {
     const ok = await sheet({
       title: "Вставить списком",
       body: el("div", {}, [
-        el("p.faint", { text: "По одному получателю в строке: адрес, затем сумма." }),
+        el("p.faint", {
+          text: "По одному получателю в строке: адрес и сумма, в любом порядке. Запятая в сумме считается дробной.",
+        }),
         area,
       ]),
       confirmText: "Добавить",
@@ -143,10 +167,10 @@ export function batchScreen(ctx) {
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => line.split(/[\s,;]+/).filter(Boolean))
-      .filter((parts) => parts.length >= 2);
+      .map(parseLine)
+      .filter((row) => row.to);
 
-    if (!parsed.length) return toast("Не нашли ни одной строки вида «адрес сумма»", { error: true });
+    if (!parsed.length) return toast("Не нашли ни одного адреса", { error: true });
 
     // Пустые строки, оставшиеся от заготовки, занимать место не должны.
     for (const row of [...rows.children]) {
@@ -156,9 +180,19 @@ export function batchScreen(ctx) {
       if (empty) row.remove();
     }
 
-    for (const [to, amount] of parsed) addRow(to, amount);
-    haptic("success");
-    toast(`Добавлено получателей: ${parsed.length}`);
+    // Больше MAX контракт не примет: лишнее отсекаем сразу и говорим об этом,
+    // а не ругаемся отдельно на каждую строку сверх предела.
+    const room = Math.max(0, MAX - rows.children.length);
+    const fit = parsed.slice(0, room);
+    for (const { to, amount } of fit) addRow(to, amount);
+
+    const noAmount = fit.filter((row) => !row.amount).length;
+    const said = [`Добавлено получателей: ${fit.length}`];
+    if (noAmount) said.push(`без суммы: ${noAmount}`);
+    if (parsed.length > fit.length) said.push(`не поместилось: ${parsed.length - fit.length}`);
+
+    haptic(noAmount || parsed.length > fit.length ? "warning" : "success");
+    toast(said.join(" · "), { error: parsed.length > fit.length });
   };
 
   const send = el("button.btn.btn--primary", {

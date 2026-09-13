@@ -1,7 +1,7 @@
 import { Address, fromNano, toNano } from "@ton/core";
 
 import { el, fmtCoins, shortAddress } from "../dom.js";
-import { linkButton, runAction, sheet, toast } from "../components.js";
+import { amountInput, linkButton, runAction, sheet, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { COIN } from "../../core/constants.js";
 import { explainError } from "../../core/client.js";
@@ -61,7 +61,8 @@ export function sendScreen(ctx) {
     autocomplete: "off",
     spellcheck: false,
   });
-  const amount = el("input.input", { type: "text", inputmode: "decimal", placeholder: "0.1" });
+  // Точность берём у выбранной монеты: у GRAM девять знаков, у USD₮ шесть.
+  const amount = amountInput({ placeholder: "0.1", decimals: () => asset.decimals ?? 9 });
   const note = el("input.input", { type: "text", placeholder: "Необязательно", maxlength: 120 });
 
   const amountLabel = el("span.field__label", { text: `Сумма, ${COIN}` });
