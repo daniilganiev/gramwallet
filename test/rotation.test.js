@@ -85,14 +85,15 @@ check("влезает в одну ячейку", body.bits.length <= 1023, `${bo
 console.log("\nНазвание операции в истории");
 
 /*
- * Тело настоящей ротации из мейннета. Индексатор отдаёт это событие как
- * "unknown" без единой детали, и название берётся только отсюда — поэтому
- * разбор проверяем на реальных байтах, а не на собранных тут же.
+ * Тело в том виде, в каком его отдаёт индексатор: BOC внешнего сообщения
+ * целиком. Настоящие байты с цепочки сюда не кладём — в них лежит публичный
+ * ключ, а по нему считается адрес живого кошелька.
+ *
+ * Проверка от этого не слабеет: она ловит ровно то, ради чего написана —
+ * что опкод ищут за подписью, а не в начале тела. Переставь signRequest
+ * подпись в конец, как в wallet v5, и этот тест упадёт.
  */
-const ROTATION_BODY =
-  "te6cckEBAgEAtQAB4KWZtmWXv/HYAgJXe5PCZW2f+Z1t81w78h3PVgFaKPBozXyv+58JxOnv5NMq/ZmBfMHLF9Xp2YGSwtV6G97t" +
-  "Ggr7upnIf/9/EWqXIM0AAAAEEkmkjojkpPcRrwQkNe4MpGxOfFykKypAvkT7503RFmMBAIBKQm8BiJENKINOvWeBWl5p+po1VtWn" +
-  "nHtB5EggszJKnpVoqcHXbRhJ1WL+Vizt6P5D6/cxfy7SLQ2g+4eeZ8sIyCMNJg==";
+const ROTATION_BODY = body.toBoc().toString("base64");
 
 const decoded = requestOpcode(ROTATION_BODY);
 check("опкод достаётся из-за подписи", decoded === OP.CHANGE_KEY_E, `0x${(decoded ?? 0).toString(16)}`);

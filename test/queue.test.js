@@ -8,7 +8,8 @@
 
 import { fetchHistory, fetchJettons, fetchNfts } from "../src/core/assets.js";
 
-const ADDR = "UQAKFZMSqnv_LHhF-Kz_dvFcqJ4pDjIFKt8fTgKs1eQEnEWd";
+// Нулевой адрес: запросы всё равно не уходят дальше подменённого fetch.
+const ADDR = "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJKZ";
 
 let failed = 0;
 const check = (name, ok, detail = "") => {
