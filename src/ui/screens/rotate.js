@@ -51,11 +51,11 @@ export function rotateScreen(ctx) {
   ctx.wallet
     .estimateKeyChangeFee()
     .then((fee) => {
-      feeLine.textContent = `Сетевая комиссия за смену — около ${fromNano(fee)} ${COIN}.`;
+      feeLine.textContent = `Сетевая комиссия — около ${fromNano(fee)} ${COIN}.`;
     })
     .catch(() => {
       // Нода не ответила: порядок цены известен и без неё, врать не приходится.
-      feeLine.textContent = `Сетевая комиссия за смену — около 0.00004 ${COIN}.`;
+      feeLine.textContent = `Сетевая комиссия — около 0.00004 ${COIN}.`;
     });
 
   const render = () => {
