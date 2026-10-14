@@ -33,6 +33,7 @@ export function lockScreen(ctx) {
       ctx.wallet = await TgWallet.fromMnemonic(data.mnemonic, {
         network: data.network,
         address: data.address,
+        scheme: data.scheme,
       });
       haptic("success");
       ctx.go("home");

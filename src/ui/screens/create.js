@@ -1,4 +1,4 @@
-import { mnemonicNew, mnemonicToPrivateKey } from "@ton/crypto";
+import { mnemonicNew } from "@ton/crypto";
 
 import { TgWallet } from "../../core/wallet.js";
 
@@ -6,6 +6,7 @@ import { el, copyText } from "../dom.js";
 import { linkButton, pinField, PIN_LENGTH, primaryButton, runAction, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { walletTgAddress } from "../../core/detect.js";
+import { SCHEME, keyPairFor } from "../../core/mnemonic.js";
 import { saveWallet } from "../../crypto/vault.js";
 
 /** Три случайных номера слова для проверки бэкапа. */
@@ -165,20 +166,22 @@ export function pinScreen(ctx) {
 
         // При импорте адрес уже проверен и может отличаться от выводимого
         // из фразы — так бывает, если у кошелька меняли ключ.
+        const scheme = ctx.draft.scheme ?? SCHEME.TON;
         let address = ctx.draft.address;
         if (!address) {
-          const keyPair = await mnemonicToPrivateKey(mnemonic);
+          const keyPair = await keyPairFor(mnemonic, scheme);
           address = walletTgAddress(keyPair.publicKey, ctx.network).toString({ bounceable: true });
         }
 
-        await saveWallet({ mnemonic, address, network: ctx.network }, value);
+        await saveWallet({ mnemonic, address, network: ctx.network, scheme }, value);
         ctx.draft = null;
-        ctx.session = { mnemonic, address, network: ctx.network };
+        ctx.session = { mnemonic, address, network: ctx.network, scheme };
         // Без этого главный экран открывался пустым: он работает с ctx.wallet,
         // а собирался тот до сих пор только при разблокировке.
         ctx.wallet = await TgWallet.fromMnemonic(mnemonic, {
           network: ctx.network,
           address,
+          scheme,
         });
 
         haptic("success");

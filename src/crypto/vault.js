@@ -113,7 +113,7 @@ export function getMeta() {
 }
 
 /** Шифрует фразу PIN-ом и кладёт в localStorage. */
-export async function saveWallet({ mnemonic, address, network = "mainnet" }, pin) {
+export async function saveWallet({ mnemonic, address, network = "mainnet", scheme = "ton" }, pin) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
@@ -142,6 +142,9 @@ export async function saveWallet({ mnemonic, address, network = "mainnet" }, pin
       ct: toB64(ct),
       address: typeof address === "string" ? address : address.toString({ bounceable: true }),
       network,
+      // Схема вывода ключа не секрет, но без неё фраза из Telegram
+      // откроет чужой пустой адрес. Старые записи — все TON.
+      scheme,
       createdAt: Date.now(),
     }),
   );
@@ -164,7 +167,12 @@ export async function unlock(pin) {
     throw new Error("Неверный PIN.");
   }
 
-  const result = { mnemonic: phrase.split(/\s+/), address: v.address, network: v.network ?? "mainnet" };
+  const result = {
+    mnemonic: phrase.split(/\s+/),
+    address: v.address,
+    network: v.network ?? "mainnet",
+    scheme: v.scheme ?? "ton",
+  };
 
   // Кошелёк, сохранённый до перехода на Argon2id, перешифровываем на месте:
   // PIN в руках, фраза расшифрована, второго удобного случая не будет.
@@ -179,11 +187,14 @@ export async function unlock(pin) {
   return result;
 }
 
-/** После ротации ключа фраза меняется, адрес — нет. */
+/**
+ * После ротации ключа фраза меняется, адрес — нет. Новую фразу выдаёт
+ * наш клиент, поэтому схема всегда TON, даже если кошелёк пришёл из Telegram.
+ */
 export async function replaceMnemonic(newMnemonic, pin) {
   const meta = getMeta();
   if (!meta) throw new Error("Нет сохранённого кошелька.");
-  await saveWallet({ mnemonic: newMnemonic, address: meta.address, network: meta.network }, pin);
+  await saveWallet({ mnemonic: newMnemonic, address: meta.address, network: meta.network, scheme: "ton" }, pin);
 }
 
 /** Удаляет кошелёк с устройства. Без сохранённой фразы это необратимо. */

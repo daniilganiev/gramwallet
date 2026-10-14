@@ -8,6 +8,7 @@ import { haptic } from "../../telegram.js";
 import { COIN } from "../../core/constants.js";
 import { replaceMnemonic } from "../../crypto/vault.js";
 import { TgWallet } from "../../core/wallet.js";
+import { SCHEME } from "../../core/mnemonic.js";
 import { requirePin } from "./lock.js";
 
 /**
@@ -59,7 +60,7 @@ export function rotateScreen(ctx) {
     });
 
   const render = () => {
-    screen.replaceChildren(...({ warn, phrase }[stage]()));
+    screen.replaceChildren(...{ warn, phrase }[stage]().filter(Boolean));
     screen.scrollTop = 0;
   };
 
@@ -74,6 +75,19 @@ export function rotateScreen(ctx) {
       el("div.rotate__row", { text: "Вернуть её обратно нельзя" }),
       el("div.rotate__row", { text: "Менять фразу можно сколько угодно" }),
     ]),
+
+    /*
+     * Обойти это нельзя: в контракте ровно один ключ, и Telegram Wallet
+     * подписывает старым. Вернуть кошелёк туда новой фразой тоже не выйдет —
+     * Telegram выводит адрес из ключа, а из новой фразы выйдет чужой, пустой.
+     */
+    ctx.session?.scheme === SCHEME.BIP39 &&
+      el("div.note.note--danger", {}, [
+        el("strong", { text: "Telegram Wallet потеряет доступ к этому кошельку" }),
+        el("div", {
+          text: "Новая фраза будет только здесь. Адрес и деньги останутся на месте, но открыть кошелёк в Telegram Wallet больше не получится — ни старой фразой, ни новой.",
+        }),
+      ]),
 
     el("p.screen__hint", {
       text: "Новую фразу сохраните вместе с адресом: после смены адрес из фразы уже не выводится.",
@@ -143,6 +157,7 @@ export function rotateScreen(ctx) {
             // Фраза меняется, адрес — нет.
             await replaceMnemonic(mnemonic, pin);
             ctx.session.mnemonic = mnemonic;
+            ctx.session.scheme = SCHEME.TON;
             ctx.wallet = await TgWallet.fromMnemonic(mnemonic, {
               network: ctx.wallet.network,
               address: ctx.wallet.address,

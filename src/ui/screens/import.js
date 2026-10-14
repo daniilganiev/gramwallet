@@ -1,10 +1,12 @@
-import { mnemonicToPrivateKey, mnemonicValidate } from "@ton/crypto";
-
 import { el, fmtCoins, shortAddress } from "../dom.js";
 import { glassButton, linkButton, runAction, toast } from "../components.js";
 import { haptic } from "../../telegram.js";
 import { Providers } from "../../core/client.js";
 import { detectWallet, verifyByAddress } from "../../core/detect.js";
+import { SCHEME, keyPairFor, schemesOf } from "../../core/mnemonic.js";
+
+/** Чем меньше, тем живее находка. */
+const RANK = { wallettg: 0, rotated: 1, foreign: 2, empty: 3 };
 
 /**
  * Импорт с защитой от чужих сид-фраз.
@@ -14,7 +16,7 @@ import { detectWallet, verifyByAddress } from "../../core/detect.js";
  */
 export function importScreen(ctx) {
   const phrase = el("textarea.input", {
-    placeholder: "Двадцать четыре слова через пробел",
+    placeholder: "12 или 24 слова через пробел",
     autocapitalize: "none",
     autocomplete: "off",
     spellcheck: false,
@@ -42,35 +44,55 @@ export function importScreen(ctx) {
           setStatus(null);
 
           const words = phrase.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-          if (words.length !== 24) {
+          if (words.length !== 12 && words.length !== 24) {
             haptic("error");
-            return toast(`Нужно 24 слова, а введено ${words.length}`, { error: true });
+            return toast(`Нужно 12 или 24 слова, а введено ${words.length}`, { error: true });
           }
-          if (!(await mnemonicValidate(words))) {
+          const schemes = await schemesOf(words);
+          if (!schemes.length) {
             haptic("error");
             return toast("Такой seed-фразы не существует — проверь слова и порядок", { error: true });
           }
 
-          const keyPair = await mnemonicToPrivateKey(words);
+          // Фраза может пройти проверку обеих схем сразу. Первой пробуем
+          // вероятную: 12 слов выдаёт Telegram, 24 — обычно наш клиент.
+          const likely = words.length === 12 ? SCHEME.BIP39 : SCHEME.TON;
+          schemes.sort((a, b) => (b === likely) - (a === likely));
+          const candidates = [];
+          for (const scheme of schemes) {
+            candidates.push({ scheme, keyPair: await keyPairFor(words, scheme) });
+          }
+
           const providers = new Providers(ctx.network);
           const typed = address.value.trim();
 
           // Указан адрес — единственный корректный путь для кошелька,
           // у которого меняли ключ: сверяем ключ из фразы с контрактом.
           if (typed) {
-            const res = await verifyByAddress(typed, keyPair.publicKey, providers);
-            if (!res.ok) {
-              haptic("error");
-              return setStatus(el("div.note.note--danger", { text: res.reason }));
+            let res;
+            for (const { scheme, keyPair } of candidates) {
+              res = await verifyByAddress(typed, keyPair.publicKey, providers);
+              if (res.ok) return finish(ctx, words, res.address.toString({ bounceable: true }), scheme);
             }
-            return finish(ctx, words, res.address.toString({ bounceable: true }));
+            haptic("error");
+            return setStatus(el("div.note.note--danger", { text: res.reason }));
           }
 
           // Адрес не указан — ищем, что вообще стоит за этой фразой.
-          const found = await detectWallet(keyPair.publicKey, providers, ctx.network);
+          // При двух схемах берём ту, что привела к самому живому кошельку.
+          let found;
+          let scheme;
+          for (const c of candidates) {
+            const next = await detectWallet(c.keyPair.publicKey, providers, ctx.network);
+            if (!found || RANK[next.kind] < RANK[found.kind]) {
+              found = next;
+              scheme = c.scheme;
+            }
+            if (found.kind === "wallettg") break;
+          }
 
           if (found.kind === "wallettg") {
-            return finish(ctx, words, found.address.toString({ bounceable: true }));
+            return finish(ctx, words, found.address.toString({ bounceable: true }), scheme);
           }
 
           // Фраза от этого же кошелька, но до смены ключа: адрес живой,
@@ -114,7 +136,7 @@ export function importScreen(ctx) {
               }),
               el("div.screen__actions", {}, [
                 glassButton("Всё равно подключить", () =>
-                  finish(ctx, words, found.address.toString({ bounceable: true })),
+                  finish(ctx, words, found.address.toString({ bounceable: true }), scheme),
                 ),
               ]),
             ]),
@@ -127,11 +149,18 @@ export function importScreen(ctx) {
   return el("div.screen.stack.import", {}, [
     el("h1.glow", { "data-t": "Восстановление кошелька", text: "Восстановление кошелька" }),
     el("p.lead", {
-      text: "Введи seed-фразу от кошелька, созданного в этом клиенте или самостоятельно через контракт WalletTg",
+      text: "Введи seed-фразу от кошелька, созданного в этом клиенте, в Telegram Wallet или самостоятельно через контракт WalletTg",
     }),
 
-    el("div.note", {
-      text: "Фразы от Tonkeeper, кошелька в Telegram и других приложений здесь не работают — у них другой тип контракта. Не вводи их сюда.",
+    el("div.note.note--ok", {}, [
+      el("strong", { text: "Кошелёк из Telegram Wallet переносится целиком" }),
+      el("div", {
+        text: "В настройках Telegram Wallet нажми «Показать секретную фразу» и вставь сюда все слова — 12 или 24. Адрес и баланс останутся прежними.",
+      }),
+    ]),
+
+    el("p.screen__hint", {
+      text: "Фразы от Tonkeeper и других приложений с обычными кошельками здесь не работают — у них другой тип контракта.",
     }),
 
     el("div.glass", {}, [
@@ -153,8 +182,8 @@ export function importScreen(ctx) {
   ]);
 }
 
-function finish(ctx, mnemonic, address) {
+function finish(ctx, mnemonic, address, scheme) {
   haptic("success");
-  ctx.draft = { mnemonic, address };
+  ctx.draft = { mnemonic, address, scheme };
   ctx.go("pin");
 }

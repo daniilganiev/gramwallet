@@ -4,7 +4,7 @@
  */
 
 import { Address, Cell, beginCell, contractAddress, external, storeMessage } from "@ton/core";
-import { keyPairFromSeed, mnemonicToPrivateKey, signVerify } from "@ton/crypto";
+import { keyPairFromSeed, signVerify } from "@ton/crypto";
 
 import {
   DEFAULT_TTL_SECONDS,
@@ -14,6 +14,7 @@ import {
   TRAMPOLINE_BOC,
 } from "./constants.js";
 import { Providers, explainError, sleep } from "./client.js";
+import { SCHEME, keyPairFor } from "./mnemonic.js";
 import {
   buildChangeKeyRequest,
   buildKeyRotationProof,
@@ -55,9 +56,9 @@ export class TgWallet {
     this.providers = new Providers(network);
   }
 
-  static async fromMnemonic(mnemonic, { network = "mainnet", address = null } = {}) {
+  static async fromMnemonic(mnemonic, { network = "mainnet", address = null, scheme = SCHEME.TON } = {}) {
     const words = Array.isArray(mnemonic) ? mnemonic : String(mnemonic).trim().split(/\s+/);
-    const keyPair = await mnemonicToPrivateKey(words);
+    const keyPair = await keyPairFor(words, scheme);
     return new TgWallet({ keyPair, network, address });
   }
 

@@ -339,6 +339,7 @@ export function welcomeScreen(ctx) {
       // Импорт убирать нельзя: данные браузера чистятся и сами по себе,
       // а человек с фразой на руках должен уметь вернуть доступ.
       linkButton("У меня есть seed-фраза", () => ctx.go("import")),
+      linkButton("Перенести из Telegram Wallet", () => ctx.go("import")),
       linkButton("Назад", () => ctx.go("safety")),
     ]),
   ]);
