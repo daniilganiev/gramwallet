@@ -70,11 +70,26 @@ export class Providers {
     this.client = null;
   }
 
+  /**
+   * Провайдер, который не смог выдать эндпоинт, пропускаем. Ton-access бывает
+   * мёртв целиком: список нод приходит пустым, и без перехода дальше всё
+   * приложение висело на «нет связи», хотя toncenter отвечал.
+   */
   async connect({ next = false } = {}) {
-    if (next) this.index = (this.index + 1) % this.factories.length;
-    this.endpoint = await this.factories[this.index]();
-    this.client = new TonClient({ endpoint: this.endpoint });
-    return this.client;
+    const count = this.factories.length;
+    if (next) this.index = (this.index + 1) % count;
+    let lastError;
+    for (let i = 0; i < count; i++) {
+      try {
+        this.endpoint = await this.factories[this.index]();
+        this.client = new TonClient({ endpoint: this.endpoint });
+        return this.client;
+      } catch (e) {
+        lastError = e;
+        this.index = (this.index + 1) % count;
+      }
+    }
+    throw lastError;
   }
 
   /** Любой запрос к ноде: с ретраями и переездом на другого провайдера. */
